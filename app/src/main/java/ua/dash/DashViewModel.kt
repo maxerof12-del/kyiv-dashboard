@@ -4,6 +4,8 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -166,8 +168,8 @@ class DashViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             say("Claude: увійдіть у браузері та натисніть «Authorize»…")
             try {
-                val params = kotlinx.coroutines.coroutineScope {
-                    val d = kotlinx.coroutines.async {
+                val params: Map<String, String> = coroutineScope {
+                    val d = async {
                         OAuth.awaitRedirect(ClaudeAuth.PORT, ClaudeAuth.PATH)
                     }
                     delay(300)
@@ -214,8 +216,8 @@ class DashViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             say("ChatGPT: увійдіть у браузері…")
             try {
-                val params = kotlinx.coroutines.coroutineScope {
-                    val d = kotlinx.coroutines.async {
+                val params: Map<String, String> = coroutineScope {
+                    val d = async {
                         OAuth.awaitRedirect(CodexAuth.PORT, CodexAuth.PATH)
                     }
                     delay(300)
