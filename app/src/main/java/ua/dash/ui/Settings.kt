@@ -74,29 +74,22 @@ fun SettingsScreen(vm: DashViewModel, state: UiState, openUrl: (String) -> Unit,
                     )
                 }
 
-                Section("Claude", p) {
+                Section("Карта", p) {
+                    var url by remember { mutableStateOf(state.mapUrl) }
                     Text(
-                        if (state.claudeLoggedIn) "Вхід виконано ✓" else "Не підключено",
-                        color = if (state.claudeLoggedIn) p.good else p.muted, fontSize = 15.sp
-                    )
-                    Text(
-                        "Окремий вхід для цього телефона — Claude Code на комп'ютері не розлогіниться.",
+                        "Будь-який сайт з картою. За замовчуванням — офіційна карта «Повітряна тривога».",
                         color = p.muted, fontSize = 13.sp
                     )
-                    var code by remember { mutableStateOf("") }
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(onClick = { vm.loginClaude(openUrl) }) { Text("Увійти в Claude") }
-                        OutlinedButton(onClick = { vm.startClaudeManual(openUrl) }) { Text("Вхід з кодом (запасний)") }
-                        if (state.claudeLoggedIn) OutlinedButton(onClick = { vm.logoutClaude() }) { Text("Вийти") }
-                    }
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         OutlinedTextField(
-                            value = code, onValueChange = { code = it },
-                            label = { Text("Код зі сторінки Anthropic") },
+                            value = url, onValueChange = { url = it },
+                            label = { Text("Адреса сайту карти") },
                             singleLine = true, modifier = Modifier.weight(1f)
                         )
                         Spacer(Modifier.width(10.dp))
-                        OutlinedButton(onClick = { vm.finishClaudeManual(code); code = "" }) { Text("Підтвердити") }
+                        Button(onClick = { vm.setMapUrl(url) }) { Text("Зберегти") }
+                        Spacer(Modifier.width(10.dp))
+                        OutlinedButton(onClick = { url = ua.dash.data.Prefs.DEFAULT_MAP; vm.setMapUrl(url) }) { Text("Типова") }
                     }
                 }
 

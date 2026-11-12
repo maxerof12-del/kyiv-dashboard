@@ -4,6 +4,10 @@ import android.content.Context
 import android.content.SharedPreferences
 
 class Prefs(context: Context) {
+    companion object {
+        const val DEFAULT_MAP = "https://map.ukrainealarm.com/"
+    }
+
     private val sp: SharedPreferences =
         context.getSharedPreferences("dash", Context.MODE_PRIVATE)
 
@@ -74,6 +78,11 @@ class Prefs(context: Context) {
     var codexExpires: Long
         get() = sp.getLong("codexExpires", 0L)
         set(v) = sp.edit().putLong("codexExpires", v).apply()
+
+    // Карта
+    var mapUrl: String
+        get() = str("mapUrl", DEFAULT_MAP)
+        set(v) = put("mapUrl", v)
 
     // Экран
     var lightTheme: Boolean

@@ -14,7 +14,10 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import ua.dash.data.Air
 import ua.dash.data.AlertState
+import ua.dash.data.ExtrasRepo
+import ua.dash.data.Rates
 import ua.dash.data.AlertsRepo
 import ua.dash.data.ClaudeAuth
 import ua.dash.data.CodexAuth
@@ -35,6 +38,9 @@ data class UiState(
     val power: Res<PowerInfo> = Res(),
     val claude: Res<LimitsInfo> = Res(),
     val codex: Res<LimitsInfo> = Res(),
+    val rates: Res<Rates> = Res(),
+    val air: Res<Air> = Res(),
+    val mapUrl: String = "",
     val claudeLoggedIn: Boolean = false,
     val codexLoggedIn: Boolean = false,
     val loginMessage: String? = null,
@@ -52,6 +58,7 @@ class DashViewModel(app: Application) : AndroidViewModel(app) {
             codexLoggedIn = prefs.codexAccess.isNotBlank(),
             lightTheme = prefs.lightTheme,
             nightDim = prefs.nightDim,
+            mapUrl = prefs.mapUrl,
         )
     )
     val state: StateFlow<UiState> = _state
@@ -66,6 +73,8 @@ class DashViewModel(app: Application) : AndroidViewModel(app) {
         dtekJob = loop(10 * 60_000L) { refreshPower() }
         claudeJob = loop(2 * 60_000L) { refreshClaude() }
         codexJob = loop(2 * 60_000L) { refreshCodex() }
+        loop(60 * 60_000L) { refreshRates() }
+        loop(30 * 60_000L) { refreshAir() }
     }
 
     private fun loop(period: Long, block: suspend () -> Unit): Job = viewModelScope.launch {
@@ -107,6 +116,16 @@ class DashViewModel(app: Application) : AndroidViewModel(app) {
         WeatherRepo.fetch(prefs.lat, prefs.lon)
     }
 
+    suspend fun refreshRates() = load({ it.rates }, { s, r -> s.copy(rates = r) }) { ExtrasRepo.rates() }
+
+    suspend fun refreshAir() = load({ it.air }, { s, r -> s.copy(air = r) }) { ExtrasRepo.air(prefs.lat, prefs.lon) }
+
+    fun setMapUrl(u: String) {
+        val v = u.trim().ifBlank { Prefs.DEFAULT_MAP }.let { if (it.startsWith("http")) it else "https://$it" }
+        prefs.mapUrl = v
+        _state.update { it.copy(mapUrl = v) }
+    }
+
     suspend fun refreshAlert() = load({ it.alert }, { s, r -> s.copy(alert = r) }) {
         AlertsRepo.fetch(prefs)
     }
@@ -135,6 +154,8 @@ class DashViewModel(app: Application) : AndroidViewModel(app) {
         launch { refreshPower() }
         launch { refreshClaude() }
         launch { refreshCodex() }
+        launch { refreshRates() }
+        launch { refreshAir() }
     }
 
     // ───── Настройки ─────
