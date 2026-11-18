@@ -131,7 +131,16 @@ fun Dashboard(state: UiState, battery: Pair<Int, Boolean>, onSettings: () -> Uni
                     horizontalArrangement = Arrangement.spacedBy(d(10))
                 ) {
                     ClockCard(state, now, battery, onSettings, Modifier.weight(1.1f).fillMaxHeight())
-                    PowerPanel(state.power, now, Modifier.weight(1f).fillMaxHeight().clickable { onRefresh() })
+                    Column(
+                        Modifier.weight(1f).fillMaxHeight(),
+                        verticalArrangement = Arrangement.spacedBy(d(10))
+                    ) {
+                        if (state.feedEnabled) FeedBox(state, now)
+                        PowerPanel(
+                            state.power, now, compact = state.feedEnabled,
+                            modifier = Modifier.weight(1f).fillMaxWidth().clickable { onRefresh() }
+                        )
+                    }
                     Column(
                         Modifier.weight(1.1f).fillMaxHeight(),
                         verticalArrangement = Arrangement.spacedBy(d(10))
@@ -161,8 +170,7 @@ private fun ClockCard(
             .padding(d(12))
     ) {
         BoxWithConstraints(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            val showFeed = state.feedEnabled
-            val dial = minOf(maxWidth, maxHeight - d(118) - if (showFeed) d(84) else 0.dp)
+            val dial = minOf(maxWidth, maxHeight - d(118))
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Box(Modifier.size(dial)) { AnalogClock(state.power.data, now) }
                 Row(verticalAlignment = Alignment.Bottom) {
@@ -184,10 +192,6 @@ private fun ClockCard(
                         "🎉 $it", color = p.on, fontSize = t(14), maxLines = 1,
                         overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = d(3))
                     )
-                }
-                if (showFeed) {
-                    Spacer(Modifier.height(d(8)))
-                    FeedBox(state, now)
                 }
             }
         }
@@ -214,27 +218,21 @@ private fun FeedBox(state: UiState, now: ZonedDateTime) {
     val p = LocalPalette.current
     val f = state.botFeed.data
     val nowMs = now.toInstant().toEpochMilli()
-    Column(
-        Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(d(12)))
-            .background(p.card2)
-            .padding(horizontal = d(12), vertical = d(7))
-    ) {
+    Card(Modifier.fillMaxWidth()) {
         if (f?.lastAt == null) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("🍼", fontSize = t(22))
-                Spacer(Modifier.width(d(8)))
+                Text("🍼", fontSize = t(30))
+                Spacer(Modifier.width(d(10)))
                 Text(
                     when {
                         state.botSearching -> "шукаю бота в Wi-Fi…"
                         f != null -> "записів ще немає"
                         else -> state.botFeed.error ?: "підключаюсь до бота…"
                     },
-                    color = p.muted, fontSize = t(15), maxLines = 1
+                    color = p.muted, fontSize = t(18), maxLines = 1
                 )
             }
-            return@Column
+            return@Card
         }
         val ago = nowMs - f.lastAt
         val c = when {
@@ -243,23 +241,26 @@ private fun FeedBox(state: UiState, now: ZonedDateTime) {
             else -> p.bad
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("🍼", fontSize = t(22))
-            Spacer(Modifier.width(d(6)))
-            Text(hm(zdt(f.lastAt)), color = p.text, fontSize = t(26), fontWeight = FontWeight.Bold, lineHeight = t(28))
+            Text("🍼", fontSize = t(30))
+            Spacer(Modifier.width(d(8)))
+            Text(hm(zdt(f.lastAt)), color = p.text, fontSize = t(44), fontWeight = FontWeight.Bold, lineHeight = t(46))
             f.lastMl?.let {
                 Text(
-                    " · " + (if (it % 1.0 == 0.0) it.toInt().toString() else it.toString()) + " мл",
-                    color = p.text, fontSize = t(17), maxLines = 1
+                    "  " + (if (it % 1.0 == 0.0) it.toInt().toString() else it.toString()) + " мл",
+                    color = p.text, fontSize = t(22), maxLines = 1
                 )
             }
             Spacer(Modifier.weight(1f))
-            Text("${durationText(ago)} тому", color = c, fontSize = t(18), fontWeight = FontWeight.Bold, maxLines = 1)
+            Column(horizontalAlignment = Alignment.End) {
+                Text(durationText(ago), color = c, fontSize = t(26), fontWeight = FontWeight.Bold, maxLines = 1, lineHeight = t(28))
+                Text("тому", color = c, fontSize = t(14))
+            }
         }
         val stale = state.botFeed.error?.let { " · ⚠ $it" } ?: ""
         Text(
             "сьогодні ${f.todayMl.roundToInt()} мл, ${f.todayCount} р." +
                 (f.lastPoop?.let { " · 💩 " + hm(zdt(it)) } ?: "") + stale,
-            color = if (stale.isNotEmpty()) p.warn else p.muted, fontSize = t(13), maxLines = 1,
+            color = if (stale.isNotEmpty()) p.warn else p.muted, fontSize = t(16), maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
     }
@@ -303,7 +304,7 @@ private fun followingPeriod(info: PowerInfo, now: ZonedDateTime, a: PowerNow): T
 }
 
 @Composable
-private fun PowerPanel(res: Res<PowerInfo>, now: ZonedDateTime, modifier: Modifier) {
+private fun PowerPanel(res: Res<PowerInfo>, now: ZonedDateTime, compact: Boolean = false, modifier: Modifier) {
     val p = LocalPalette.current
     Card(modifier) {
         val info = res.data
@@ -347,27 +348,43 @@ private fun PowerPanel(res: Res<PowerInfo>, now: ZonedDateTime, modifier: Modifi
             val tomorrow = at.toLocalDate() != now.toLocalDate()
             Text(
                 verb + (if (tomorrow) " завтра о" else " о"),
-                color = p.muted, fontSize = t(20), modifier = Modifier.padding(top = d(10))
-            )
-            Text(
-                hm(at),
-                color = if (a.nextSlot == Slot.ON) p.on else p.text,
-                fontSize = t(86), fontWeight = FontWeight.Bold, lineHeight = t(88), letterSpacing = t(-2)
+                color = p.muted, fontSize = t(if (compact) 17 else 20),
+                modifier = Modifier.padding(top = d(if (compact) 6 else 10))
             )
             val left = a.nextChangeMs - now.toInstant().toEpochMilli()
-            Text(
-                androidx.compose.ui.text.buildAnnotatedString {
-                    append("через ")
-                    pushStyle(androidx.compose.ui.text.SpanStyle(fontWeight = FontWeight.Bold))
-                    append(durationText(left))
-                    pop()
-                },
-                color = p.text, fontSize = t(21)
-            )
+            if (compact) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        hm(at),
+                        color = if (a.nextSlot == Slot.ON) p.on else p.text,
+                        fontSize = t(60), fontWeight = FontWeight.Bold, lineHeight = t(62), letterSpacing = t(-1)
+                    )
+                    Spacer(Modifier.width(d(12)))
+                    Column {
+                        Text("через", color = p.muted, fontSize = t(15))
+                        Text(durationText(left), color = p.text, fontSize = t(19), fontWeight = FontWeight.Bold, maxLines = 1)
+                    }
+                }
+            } else {
+                Text(
+                    hm(at),
+                    color = if (a.nextSlot == Slot.ON) p.on else p.text,
+                    fontSize = t(86), fontWeight = FontWeight.Bold, lineHeight = t(88), letterSpacing = t(-2)
+                )
+                Text(
+                    androidx.compose.ui.text.buildAnnotatedString {
+                        append("через ")
+                        pushStyle(androidx.compose.ui.text.SpanStyle(fontWeight = FontWeight.Bold))
+                        append(durationText(left))
+                        pop()
+                    },
+                    color = p.text, fontSize = t(21)
+                )
+            }
             if (a.periodStartMs != null) {
                 val total = (a.nextChangeMs - a.periodStartMs).toFloat()
                 val done = ((now.toInstant().toEpochMilli() - a.periodStartMs) / total).coerceIn(0f, 1f)
-                Spacer(Modifier.height(d(8)))
+                Spacer(Modifier.height(d(if (compact) 4 else 8)))
                 Canvas(Modifier.fillMaxWidth().height(d(9))) {
                     val r = CornerRadius(size.height / 2)
                     drawRoundRect(p.track, cornerRadius = r)
@@ -376,7 +393,7 @@ private fun PowerPanel(res: Res<PowerInfo>, now: ZonedDateTime, modifier: Modifi
                         size = Size(size.width * done, size.height), cornerRadius = r
                     )
                 }
-                Text(
+                if (!compact) Text(
                     (if (a.current == Slot.ON) "світло з " else "без світла з ") + hm(zdt(a.periodStartMs)) +
                         " · минуло " + durationText(now.toInstant().toEpochMilli() - a.periodStartMs),
                     color = p.muted, fontSize = t(13), maxLines = 1, modifier = Modifier.padding(top = d(4))
