@@ -591,9 +591,10 @@ private fun FeedBig(state: UiState, now: ZonedDateTime, modifier: Modifier) {
             return@Card
         }
         val ago = nowMs - f.lastAt
+        // < 2 ч — зелёный, 2–3 ч — оранжевый, от 3 ч — красный
         val c = when {
-            ago < 150 * 60_000 -> p.good
-            ago < 210 * 60_000 -> p.warn
+            ago < 120 * 60_000 -> p.good
+            ago < 180 * 60_000 -> Color(0xFFFF9F1C)
             else -> p.bad
         }
         Spacer(Modifier.weight(1f))
@@ -618,7 +619,7 @@ private fun FeedBig(state: UiState, now: ZonedDateTime, modifier: Modifier) {
             Canvas(Modifier.fillMaxWidth().height(d(10))) {
                 val r = CornerRadius(size.height / 2)
                 drawRoundRect(p.track, cornerRadius = r)
-                drawRoundRect(p.good, size = Size(size.width * frac, size.height), cornerRadius = r)
+                drawRoundRect(c, size = Size(size.width * frac, size.height), cornerRadius = r)
             }
             Spacer(Modifier.height(d(6)))
         }
