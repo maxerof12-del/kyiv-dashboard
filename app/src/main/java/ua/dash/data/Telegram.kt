@@ -62,7 +62,10 @@ object TelegramRepo {
                 if (m.optJSONObject("from")?.optBoolean("is_bot") == true) continue
                 val text = m.optString("text").ifBlank { m.optString("caption") }
                 val at = m.getLong("date") * 1000
-                if (chatId == prefs.tgFeedChat) handleFeed(prefs, m.getLong("message_id"), text, at)
+                if (chatId == prefs.tgFeedChat) {
+                    val feedText = text.ifBlank { m.optJSONObject("sticker")?.optString("emoji") ?: "" }
+                    handleFeed(prefs, m.getLong("message_id"), feedText, at)
+                }
                 if (chatId == prefs.tgNewsChat) {
                     val shown = text.ifBlank {
                         when {
