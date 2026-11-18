@@ -615,13 +615,11 @@ private fun FeedBig(state: UiState, now: ZonedDateTime, modifier: Modifier) {
             Spacer(Modifier.height(d(6)))
         }
         val oldMin = (nowMs - f.fetchedAt) / 60_000
-        Row(verticalAlignment = Alignment.Bottom) {
-            Text(
-                "сьогодні ${f.todayMl.roundToInt()}" + (if (f.goalMl > 0) "/${f.goalMl}" else "") + " мл · ${f.todayCount} р.",
-                color = p.text, fontSize = t(17), maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f)
-            )
-            f.lastPoop?.let { Text(" 💩 " + hm(zdt(it)), color = p.muted, fontSize = t(17), maxLines = 1) }
-        }
+        Text(
+            "сьогодні ${f.todayMl.roundToInt()}" + (if (f.goalMl > 0) " / ${f.goalMl}" else "") + " мл · ${f.todayCount} р.",
+            color = p.text, fontSize = t(18), maxLines = 1, overflow = TextOverflow.Ellipsis
+        )
+        f.lastPoop?.let { Text("💩 останній о " + hm(zdt(it)), color = p.muted, fontSize = t(16), maxLines = 1) }
         val warn = (state.botFeed.error?.let { "⚠ $it" } ?: "") +
             (if (oldMin >= 20) "⚠ бот мовчить ${durationText(nowMs - f.fetchedAt)}" else "")
         if (warn.isNotEmpty()) Text(warn, color = p.warn, fontSize = t(13), maxLines = 1)
