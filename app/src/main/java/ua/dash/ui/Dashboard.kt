@@ -133,7 +133,7 @@ fun Dashboard(state: UiState, battery: Pair<Int, Boolean>, onSettings: () -> Uni
                     verticalArrangement = Arrangement.spacedBy(d(12))
                 ) {
                     PowerCard(state.power, now, Modifier.weight(1f).clickable { onRefresh() })
-                    AlertCard(state, now)
+                    if (state.tgFeedChat != 0L) FeedCard(state, now)
                 }
                 Column(
                     Modifier
@@ -142,7 +142,7 @@ fun Dashboard(state: UiState, battery: Pair<Int, Boolean>, onSettings: () -> Uni
                     verticalArrangement = Arrangement.spacedBy(d(10))
                 ) {
                     WeatherCard(state, battery)
-                    if (state.tgFeedChat != 0L) FeedCard(state, now)
+                    AlertCard(state, now)
                     MapCard(state.mapUrl, state.homeLat, state.homeLon, Modifier.weight(1f).fillMaxWidth())
                     RatesCard(state, battery, onSettings)
                 }
@@ -160,7 +160,7 @@ private fun FeedCard(state: UiState, now: ZonedDateTime) {
     val last = f?.last
     Card(Modifier.fillMaxWidth()) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("🍼", fontSize = t(24))
+            Text("🍼", fontSize = t(30))
             Spacer(Modifier.width(d(8)))
             if (last == null) {
                 Text(
@@ -170,9 +170,9 @@ private fun FeedCard(state: UiState, now: ZonedDateTime) {
                 )
                 return@Row
             }
-            Text(hm(zdt(last.at)), color = p.text, fontSize = t(28), fontWeight = FontWeight.Bold, lineHeight = t(30))
+            Text(hm(zdt(last.at)), color = p.text, fontSize = t(36), fontWeight = FontWeight.Bold, lineHeight = t(38))
             Spacer(Modifier.width(d(6)))
-            Text("${last.ml} мл", color = p.text, fontSize = t(17))
+            Text("${last.ml} мл", color = p.text, fontSize = t(22))
             Spacer(Modifier.weight(1f))
             val ago = now.toInstant().toEpochMilli() - last.at
             val c = when {
@@ -180,13 +180,13 @@ private fun FeedCard(state: UiState, now: ZonedDateTime) {
                 ago < 210 * 60_000 -> p.warn
                 else -> p.bad
             }
-            Text("${durationText(ago)} тому", color = c, fontSize = t(20), fontWeight = FontWeight.Bold)
+            Text("${durationText(ago)} тому", color = c, fontSize = t(28), fontWeight = FontWeight.Bold)
         }
         if (last != null) {
             Text(
                 "останнє годування · сьогодні ${f.todayMl} мл, ${f.todayCount} р." +
                     (f.lastPoop?.let { " · 💩 " + hm(zdt(it)) } ?: ""),
-                color = p.muted, fontSize = t(13), maxLines = 1, overflow = TextOverflow.Ellipsis
+                color = p.muted, fontSize = t(15), maxLines = 1, overflow = TextOverflow.Ellipsis
             )
         }
     }
@@ -349,13 +349,10 @@ private fun AlertCard(state: UiState, now: ZonedDateTime) {
     val a = state.alert.data
     val active = a?.active == true
     Card(Modifier.fillMaxWidth(), color = if (active) p.alertBg else p.card) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.fillMaxWidth().padding(vertical = d(6))
-        ) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
             Box(
                 Modifier
-                    .size(d(22))
+                    .size(d(16))
                     .clip(RoundedCornerShape(50))
                     .background(
                         when {
@@ -365,37 +362,43 @@ private fun AlertCard(state: UiState, now: ZonedDateTime) {
                         }
                     )
             )
-            Spacer(Modifier.width(d(16)))
-            Column(Modifier.weight(1f)) {
-                Text(
-                    when {
-                        a == null -> state.alert.error?.let { "Тривоги: $it" } ?: "Тривоги…"
-                        active -> "ПОВІТРЯНА ТРИВОГА"
-                        else -> "Тривоги немає"
-                    },
-                    color = if (active) Color.White else p.text,
-                    fontSize = t(36), fontWeight = FontWeight.Bold, lineHeight = t(40)
-                )
-                if (a != null) {
-                    Text(
-                        a.region + (if (a.oblastActive == true) " · в області тривога" else "") +
-                            Holidays.forDate(now.toLocalDate()).firstOrNull()?.let { " · $it" }.orEmpty(),
-                        color = if (active) Color.White.copy(alpha = 0.85f) else (if (a.oblastActive == true) p.warn else p.muted),
-                        fontSize = t(16), maxLines = 1, overflow = TextOverflow.Ellipsis
-                    )
-                }
-            }
+            Spacer(Modifier.width(d(12)))
+            Text(
+                when {
+                    a == null -> state.alert.error?.let { "Тривоги: $it" } ?: "Тривоги…"
+                    active -> "ТРИВОГА"
+                    else -> "Тривоги немає"
+                },
+                color = if (active) Color.White else p.text,
+                fontSize = t(26), fontWeight = FontWeight.Bold, lineHeight = t(28),
+                modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis
+            )
             if (a != null) {
                 val since = now.toInstant().toEpochMilli() - a.since
-                Column(horizontalAlignment = Alignment.End) {
-                    Text(
-                        durationText(since),
-                        color = if (active) Color.White else p.text,
-                        fontSize = t(26), fontWeight = FontWeight.Bold
+                Text(
+                    (if (active) "триває " else "") + durationText(since),
+                    color = if (active) Color.White else p.muted,
+                    fontSize = t(17), fontWeight = if (active) FontWeight.Bold else FontWeight.Normal
+                )
+            }
+        }
+        if (a != null) {
+            Spacer(Modifier.height(d(4)))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(a.region, color = if (active) Color.White.copy(alpha = 0.85f) else p.muted, fontSize = t(14))
+                if (a.oblastActive != null) {
+                    Spacer(Modifier.width(d(14)))
+                    Box(
+                        Modifier
+                            .size(d(10))
+                            .clip(RoundedCornerShape(50))
+                            .background(if (a.oblastActive) (if (active) Color.White else p.bad) else p.good)
                     )
+                    Spacer(Modifier.width(d(6)))
                     Text(
-                        if (active) "триває" else "без тривоги",
-                        color = if (active) Color.White.copy(alpha = 0.85f) else p.muted, fontSize = t(14)
+                        "Київська обл.: " + if (a.oblastActive) "тривога" else "немає",
+                        color = if (active) Color.White.copy(alpha = 0.85f) else (if (a.oblastActive) p.bad else p.muted),
+                        fontSize = t(14)
                     )
                 }
             }
@@ -571,7 +574,7 @@ private fun PowerCard(res: Res<PowerInfo>, now: ZonedDateTime, modifier: Modifie
                 val stale = res.error?.let { " · $it" } ?: ""
                 val notice = info.notice?.replace(Regex("\\s*\\(.*?\\)"), "")
                 Text(
-                    "По краю годинника — світло на 12 год вперед · " + (notice?.let { "$it · " } ?: "") + "ДТЕК ${info.updated}$stale",
+                    (Holidays.forDate(now.toLocalDate()).firstOrNull()?.let { "🎉 $it · " } ?: "") + "край годинника — світло на 12 год · " + (notice?.let { "$it · " } ?: "") + "ДТЕК ${info.updated}$stale",
                     color = if (res.error != null) p.warn else p.muted, fontSize = t(11), maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
