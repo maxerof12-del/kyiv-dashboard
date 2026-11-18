@@ -37,11 +37,11 @@ class Prefs(context: Context) {
 
     // Погода
     var lat: Double
-        get() = str("lat", "50.4501").toDoubleOrNull() ?: 50.4501
-        set(v) = put("lat", v.toString())
+        get() = str("lat2", "50.4545").toDoubleOrNull() ?: 50.4545
+        set(v) = put("lat2", v.toString())
     var lon: Double
-        get() = str("lon", "30.5234").toDoubleOrNull() ?: 30.5234
-        set(v) = put("lon", v.toString())
+        get() = str("lon2", "30.3985").toDoubleOrNull() ?: 30.3985
+        set(v) = put("lon2", v.toString())
 
     // Тревоги
     var alertRegion: String

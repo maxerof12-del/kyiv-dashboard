@@ -138,7 +138,7 @@ fun Dashboard(state: UiState, battery: Pair<Int, Boolean>, onSettings: () -> Uni
                     verticalArrangement = Arrangement.spacedBy(d(10))
                 ) {
                     WeatherCard(state, battery)
-                    MapCard(state.mapUrl, Modifier.weight(1f).fillMaxWidth())
+                    MapCard(state.mapUrl, state.homeLat, state.homeLon, Modifier.weight(1f).fillMaxWidth())
                     RatesCard(state)
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         val hol = Holidays.forDate(now.toLocalDate())
@@ -404,26 +404,20 @@ private fun PowerCard(res: Res<PowerInfo>, now: ZonedDateTime, modifier: Modifie
                 Modifier.size(dialSize),
                 contentAlignment = Alignment.Center
             ) {
-                PowerDial(info, now)
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    val on = a?.current == Slot.ON
-                    Text(
-                        when (a?.current) { Slot.ON -> "⚡ є світло"; Slot.OFF -> "✕ немає світла"; Slot.MAYBE -> "можливе відкл."; else -> " " },
-                        color = if (on) p.on else p.muted,
-                        fontSize = t(14), fontWeight = FontWeight.Bold
-                    )
-                    Row(verticalAlignment = Alignment.Bottom) {
-                        Text(
-                            hm(now), color = p.text, fontSize = t(48), fontWeight = FontWeight.Bold,
-                            lineHeight = t(50)
-                        )
-                    }
+                // Подписи под стрелками: дата сверху, цифровое время снизу
+                Column(
+                    Modifier.fillMaxSize(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
                     Text(
                         "${DAYS_SHORT[now.dayOfWeek.value - 1]}, ${now.dayOfMonth} ${MONTHS[now.monthValue - 1]}",
-                        color = p.text, fontSize = t(16)
+                        color = p.muted, fontSize = t(14)
                     )
-                    Text(":%02d".format(now.second), color = p.muted, fontSize = t(13))
+                    Spacer(Modifier.height(dialSize * 0.36f))
+                    Text(hm(now), color = p.text, fontSize = t(22), fontWeight = FontWeight.Bold)
                 }
+                AnalogClock(info, now)
             }
             if (info == null) {
                 Spacer(Modifier.width(d(16)))
@@ -514,7 +508,7 @@ private fun PowerCard(res: Res<PowerInfo>, now: ZonedDateTime, modifier: Modifie
                 val stale = res.error?.let { " · $it" } ?: ""
                 val notice = info.notice?.replace(Regex("\\s*\\(.*?\\)"), "")
                 Text(
-                    (notice?.let { "$it · " } ?: "") + "ДТЕК ${info.updated}$stale",
+                    "По краю годинника — світло на 12 год вперед · " + (notice?.let { "$it · " } ?: "") + "ДТЕК ${info.updated}$stale",
                     color = if (res.error != null) p.warn else p.muted, fontSize = t(11), maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -577,76 +571,103 @@ private fun RangesLine(title: String, slots: List<Slot>?, now: ZonedDateTime, is
     }
 }
 
+/**
+ * Обычные стрелочные часы. По краю циферблата — свет на ближайшие 12 часов:
+ * жёлтый — свет есть, тёмный — нет. Часовая стрелка «едет» по этой полосе.
+ */
 @Composable
-private fun PowerDial(info: PowerInfo?, now: ZonedDateTime) {
+private fun AnalogClock(info: PowerInfo?, now: ZonedDateTime) {
     val p = LocalPalette.current
     val measurer = androidx.compose.ui.text.rememberTextMeasurer()
-    val labelStyle = androidx.compose.ui.text.TextStyle(color = p.muted, fontSize = t(11))
+    val numStyle = androidx.compose.ui.text.TextStyle(color = p.text, fontSize = t(22), fontWeight = FontWeight.Bold)
+    val all: List<Slot> = (info?.today?.slots ?: List(48) { Slot.UNKNOWN }) +
+        (info?.tomorrow?.slots ?: List(48) { Slot.UNKNOWN })
     Canvas(Modifier.fillMaxSize()) {
-        val outerW = size.minDimension * 0.11f
-        val innerW = size.minDimension * 0.045f
-        val pad = outerW / 2 + 2.dp.toPx()
         val cx = size.width / 2
         val cy = size.height / 2
-        val rOuter = size.minDimension / 2 - pad
-        val rInner = rOuter - outerW / 2 - innerW / 2 - 4.dp.toPx()
+        val R = size.minDimension / 2
+        val ringW = R * 0.13f
+        val rRing = R - ringW / 2 - 1.dp.toPx()
 
-        fun color(s: Slot?) = when (s) {
-            Slot.ON -> p.on
-            Slot.OFF -> p.off
-            Slot.MAYBE -> p.maybe
-            else -> p.track
-        }
+        fun pt(angDeg: Double, r: Float) = Offset(
+            cx + (r * kotlin.math.cos(Math.toRadians(angDeg))).toFloat(),
+            cy + (r * kotlin.math.sin(Math.toRadians(angDeg))).toFloat()
+        )
+        /** угол на 12-часовом циферблате для момента (минуты от начала суток) */
+        fun ang(minOfDay: Double) = -90.0 + (minOfDay % 720.0) / 720.0 * 360.0
 
-        fun ring(slots: List<Slot>?, r: Float, w: Float, dim: Boolean) {
-            val tl = Offset(cx - r, cy - r)
-            val sz = Size(2 * r, 2 * r)
-            for (i in 0 until 48) {
-                val gapDeg = if (i % 2 == 1) 1.4f else 0f
-                val start = -90f + i * 7.5f
-                drawArc(
-                    color = color(slots?.getOrNull(i)).let { if (dim) it.copy(alpha = 0.75f) else it },
-                    startAngle = start,
-                    sweepAngle = 7.5f - gapDeg,
-                    useCenter = false,
-                    topLeft = tl, size = sz,
-                    style = androidx.compose.ui.graphics.drawscope.Stroke(width = w)
-                )
+        // Подложка циферблата
+        drawCircle(p.card2, radius = R - ringW - 2.dp.toPx(), center = Offset(cx, cy))
+
+        // Полоса света: от «сейчас» на 12 часов вперёд
+        val nowMin = now.hour * 60 + now.minute + now.second / 60.0
+        val endMin = nowMin + 720.0
+        val tl = Offset(cx - rRing, cy - rRing)
+        val sz = Size(2 * rRing, 2 * rRing)
+        drawCircle(p.track, radius = rRing, center = Offset(cx, cy), style = androidx.compose.ui.graphics.drawscope.Stroke(ringW))
+        for (i in all.indices) {
+            val s0 = i * 30.0
+            val s1 = s0 + 30.0
+            if (s1 <= nowMin || s0 >= endMin) continue
+            val from = maxOf(s0, nowMin)
+            val to = minOf(s1, endMin)
+            val c = when (all[i]) {
+                Slot.ON -> p.on
+                Slot.OFF -> p.off
+                Slot.MAYBE -> p.maybe
+                Slot.UNKNOWN -> p.track
             }
-        }
-        ring(info?.today?.slots, rOuter, outerW, false)
-        ring(info?.tomorrow?.slots, rInner, innerW, true)
-
-        // Метки часов
-        for (h in listOf(0, 6, 12, 18)) {
-            val ang = Math.toRadians((-90.0 + h * 15.0))
-            val rl = rInner - innerW / 2 - 9.dp.toPx()
-            val layout = measurer.measure("%02d".format(h), labelStyle)
-            drawText(
-                layout,
-                topLeft = Offset(
-                    cx + (rl * kotlin.math.cos(ang)).toFloat() - layout.size.width / 2,
-                    cy + (rl * kotlin.math.sin(ang)).toFloat() - layout.size.height / 2
-                )
+            drawArc(
+                c, startAngle = ang(from).toFloat(), sweepAngle = ((to - from) / 720.0 * 360.0).toFloat() + 0.3f,
+                useCenter = false, topLeft = tl, size = sz,
+                style = androidx.compose.ui.graphics.drawscope.Stroke(ringW)
             )
         }
-
-        // Стрелка текущего времени
-        val frac = (now.hour * 60 + now.minute) / 1440.0
-        val ang = Math.toRadians(-90.0 + frac * 360.0)
-        val r1 = rOuter + outerW / 2 + 1.dp.toPx()
-        val r0 = rOuter - outerW / 2 - 1.dp.toPx()
+        // Разделители часов на полосе
+        for (h in 0 until 12) {
+            drawLine(
+                p.bg,
+                pt(-90.0 + h * 30, rRing - ringW / 2),
+                pt(-90.0 + h * 30, rRing + ringW / 2),
+                strokeWidth = 2.dp.toPx()
+            )
+        }
+        // Начало и конец 12-часового окна (там, где сейчас часовая стрелка)
         drawLine(
-            p.text,
-            Offset(cx + (r0 * kotlin.math.cos(ang)).toFloat(), cy + (r0 * kotlin.math.sin(ang)).toFloat()),
-            Offset(cx + (r1 * kotlin.math.cos(ang)).toFloat(), cy + (r1 * kotlin.math.sin(ang)).toFloat()),
-            strokeWidth = 3.dp.toPx(),
-            cap = androidx.compose.ui.graphics.StrokeCap.Round
+            p.text, pt(ang(nowMin), rRing - ringW / 2 - 2.dp.toPx()), pt(ang(nowMin), rRing + ringW / 2 + 1.dp.toPx()),
+            strokeWidth = 3.dp.toPx()
         )
-        drawCircle(
-            p.text, radius = 4.dp.toPx(),
-            center = Offset(cx + (r1 * kotlin.math.cos(ang)).toFloat(), cy + (r1 * kotlin.math.sin(ang)).toFloat())
-        )
+
+        // Минутные риски
+        val rFace = R - ringW - 2.dp.toPx()
+        for (m in 0 until 60) {
+            val big = m % 5 == 0
+            drawLine(
+                if (big) p.text else p.muted,
+                pt(-90.0 + m * 6, rFace - R * (if (big) 0.075f else 0.035f)),
+                pt(-90.0 + m * 6, rFace - R * 0.012f),
+                strokeWidth = R * (if (big) 0.018f else 0.008f),
+                cap = androidx.compose.ui.graphics.StrokeCap.Round
+            )
+        }
+        // Цифры 1–12
+        val rNum = rFace - R * 0.17f
+        for (h in 1..12) {
+            val layout = measurer.measure(h.toString(), numStyle)
+            val c = pt(-90.0 + h * 30, rNum)
+            drawText(layout, topLeft = Offset(c.x - layout.size.width / 2, c.y - layout.size.height / 2))
+        }
+
+        // Стрелки
+        val hourAng = ang(nowMin)
+        val minAng = -90.0 + (now.minute + now.second / 60.0) * 6
+        val secAng = -90.0 + now.second * 6.0
+        val cap = androidx.compose.ui.graphics.StrokeCap.Round
+        drawLine(p.text, pt(hourAng + 180, rFace * 0.08f), pt(hourAng, rFace * 0.52f), strokeWidth = R * 0.05f, cap = cap)
+        drawLine(p.text, pt(minAng + 180, rFace * 0.1f), pt(minAng, rFace * 0.82f), strokeWidth = R * 0.03f, cap = cap)
+        drawLine(p.bad, pt(secAng + 180, rFace * 0.15f), pt(secAng, rFace * 0.88f), strokeWidth = R * 0.012f, cap = cap)
+        drawCircle(p.text, radius = R * 0.045f, center = Offset(cx, cy))
+        drawCircle(p.bad, radius = R * 0.02f, center = Offset(cx, cy))
     }
 }
 

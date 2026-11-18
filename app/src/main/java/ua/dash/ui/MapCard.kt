@@ -58,7 +58,23 @@ private fun afterLoadJs(lat: Double, lon: Double, zoom: Double) = """
   (function go(){
     tries++;
     var m = window.__dashMap;
-    if (m && m.jumpTo) { try { m.resize(); m.jumpTo({center:[$lon,$lat], zoom:$zoom}); } catch(e) {} return; }
+    if (m && m.jumpTo) {
+      try { m.resize(); m.jumpTo({center:[$lon,$lat], zoom:$zoom}); } catch(e) {}
+      try {
+        if (!window.__dashMarker && window.maplibregl && maplibregl.Marker) {
+          var el = document.createElement('div');
+          el.innerHTML = '<div style="position:relative;width:22px;height:22px">' +
+            '<div style="position:absolute;inset:-10px;border-radius:50%;background:rgba(245,197,66,.28);animation:dashp 2s infinite"></div>' +
+            '<div style="position:absolute;inset:0;border-radius:50%;background:#F5C542;border:3px solid #fff;box-shadow:0 0 6px #000"></div></div>' +
+            '<div style="position:absolute;left:28px;top:0;font:bold 14px sans-serif;color:#fff;text-shadow:0 0 4px #000;white-space:nowrap">Дім · Галагани</div>';
+          var k = document.createElement('style');
+          k.textContent = '@keyframes dashp{0%{transform:scale(.6);opacity:1}100%{transform:scale(1.8);opacity:0}}';
+          document.head.appendChild(k);
+          window.__dashMarker = new maplibregl.Marker({element: el, anchor: 'center'}).setLngLat([$lon,$lat]).addTo(m);
+        }
+      } catch(e) {}
+      return;
+    }
     if (tries < 40) setTimeout(go, 500);
   })();
 })();
@@ -66,7 +82,7 @@ private fun afterLoadJs(lat: Double, lon: Double, zoom: Double) = """
 
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
-fun MapCard(url: String, modifier: Modifier = Modifier) {
+fun MapCard(url: String, lat: Double, lon: Double, modifier: Modifier = Modifier) {
     val p = LocalPalette.current
     val ctx = LocalContext.current
     val isAlarmMap = url.contains("ukrainealarm")
@@ -84,7 +100,7 @@ fun MapCard(url: String, modifier: Modifier = Modifier) {
             }
             webViewClient = object : WebViewClient() {
                 override fun onPageFinished(view: WebView, u: String?) {
-                    if (isAlarmMap) view.evaluateJavascript(afterLoadJs(50.45, 30.52, 6.6), null)
+                    if (isAlarmMap) view.evaluateJavascript(afterLoadJs(lat, lon, 7.6), null)
                 }
             }
             loadUrl(url)

@@ -43,6 +43,8 @@ data class UiState(
     val air: Res<Air> = Res(),
     val btc: Res<Btc> = Res(),
     val mapUrl: String = "",
+    val homeLat: Double = 50.4545,
+    val homeLon: Double = 30.3985,
     val claudeLoggedIn: Boolean = false,
     val codexLoggedIn: Boolean = false,
     val loginMessage: String? = null,
@@ -61,6 +63,8 @@ class DashViewModel(app: Application) : AndroidViewModel(app) {
             lightTheme = prefs.lightTheme,
             nightDim = prefs.nightDim,
             mapUrl = prefs.mapUrl,
+            homeLat = prefs.lat,
+            homeLon = prefs.lon,
         )
     )
     val state: StateFlow<UiState> = _state
