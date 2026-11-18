@@ -54,6 +54,13 @@ class Prefs(context: Context) {
         get() = sp.getBoolean("alertLastState", false)
         set(v) = sp.edit().putBoolean("alertLastState", v).apply()
 
+    var oblastSince: Long
+        get() = sp.getLong("oblastSince", 0L)
+        set(v) = sp.edit().putLong("oblastSince", v).apply()
+    var oblastLastState: Boolean
+        get() = sp.getBoolean("oblastLastState", false)
+        set(v) = sp.edit().putBoolean("oblastLastState", v).apply()
+
     // Claude
     var claudeAccess: String
         get() = str("claudeAccess")

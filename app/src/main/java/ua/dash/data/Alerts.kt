@@ -9,6 +9,7 @@ data class AlertState(
     val region: String,
     /** Тревога в области (для справки, если смотрим город) */
     val oblastActive: Boolean?,
+    val oblastSince: Long = 0,
 )
 
 object AlertsRepo {
@@ -30,6 +31,10 @@ object AlertsRepo {
             prefs.alertLastState = active
             prefs.alertSince = now
         }
-        return AlertState(active, prefs.alertSince, region, oblast)
+        if (oblast != null && (prefs.oblastSince == 0L || prefs.oblastLastState != oblast)) {
+            prefs.oblastLastState = oblast
+            prefs.oblastSince = now
+        }
+        return AlertState(active, prefs.alertSince, region, oblast, prefs.oblastSince)
     }
 }

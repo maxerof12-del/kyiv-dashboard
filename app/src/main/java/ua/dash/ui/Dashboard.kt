@@ -4,6 +4,9 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -101,6 +104,7 @@ fun Card(modifier: Modifier = Modifier, color: Color? = null, content: @Composab
     )
 }
 
+
 @Composable
 fun Dashboard(state: UiState, battery: Pair<Int, Boolean>, onSettings: () -> Unit, onRefresh: () -> Unit) {
     val p = if (state.lightTheme) LightPalette else DarkPalette
@@ -119,194 +123,463 @@ fun Dashboard(state: UiState, battery: Pair<Int, Boolean>, onSettings: () -> Uni
                 Modifier
                     .fillMaxSize()
                     .offset(x = shift.dp, y = (-shift).dp)
-                    .padding(d(14)),
+                    .padding(d(12)),
                 verticalArrangement = Arrangement.spacedBy(d(10))
             ) {
-            Row(
-                Modifier.fillMaxWidth().weight(1f),
-                horizontalArrangement = Arrangement.spacedBy(d(12))
-            ) {
-                Column(
-                    Modifier
-                        .weight(1.55f)
-                        .fillMaxHeight(),
-                    verticalArrangement = Arrangement.spacedBy(d(12))
+                Row(
+                    Modifier.fillMaxWidth().weight(1f),
+                    horizontalArrangement = Arrangement.spacedBy(d(10))
                 ) {
-                    PowerCard(state.power, now, Modifier.weight(1f).clickable { onRefresh() })
+                    ClockCard(state, now, battery, onSettings, Modifier.weight(1.1f).fillMaxHeight())
+                    PowerPanel(state.power, now, Modifier.weight(1f).fillMaxHeight().clickable { onRefresh() })
+                    Column(
+                        Modifier.weight(1.1f).fillMaxHeight(),
+                        verticalArrangement = Arrangement.spacedBy(d(10))
+                    ) {
+                        AlertCard(state, now)
+                        MapCard(state.mapUrl, state.homeLat, state.homeLon, Modifier.weight(1f).fillMaxWidth())
+                    }
                 }
-                Column(
-                    Modifier
-                        .weight(1f)
-                        .fillMaxHeight(),
-                    verticalArrangement = Arrangement.spacedBy(d(10))
-                ) {
-                    WeatherCard(state, battery)
-                    AlertCard(state, now)
-                    MapCard(state.mapUrl, state.homeLat, state.homeLon, Modifier.weight(1f).fillMaxWidth())
-                    RatesCard(state, battery, onSettings)
-                }
-            }
+                BottomStrip(state)
             }
         }
     }
 }
 
+// ───────────────────────── Часы ─────────────────────────
+
 @Composable
-private fun FeedCard(state: UiState, now: ZonedDateTime) {
+private fun ClockCard(
+    state: UiState, now: ZonedDateTime, battery: Pair<Int, Boolean>,
+    onSettings: () -> Unit, modifier: Modifier,
+) {
     val p = LocalPalette.current
-    val f = state.feed
-    val last = f?.last
-    Card(Modifier.fillMaxWidth()) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("🍼", fontSize = t(30))
-            Spacer(Modifier.width(d(8)))
-            if (last == null) {
+    Box(
+        modifier
+            .clip(RoundedCornerShape(d(18)))
+            .background(p.card)
+            .padding(d(12))
+    ) {
+        BoxWithConstraints(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            val dial = minOf(maxWidth, maxHeight - d(118))
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Box(Modifier.size(dial)) { AnalogClock(state.power.data, now) }
+                Row(verticalAlignment = Alignment.Bottom) {
+                    Text(
+                        hm(now), color = p.text, fontSize = t(68), fontWeight = FontWeight.Bold,
+                        lineHeight = t(70), letterSpacing = t(-1)
+                    )
+                    Text(
+                        ":%02d".format(now.second), color = p.muted, fontSize = t(28),
+                        modifier = Modifier.padding(start = d(2), bottom = d(9))
+                    )
+                }
                 Text(
-                    state.tgError ?: "Годування: чекаю перший запис у групі…",
-                    color = if (state.tgError != null) p.warn else p.muted, fontSize = t(15),
-                    modifier = Modifier.weight(1f)
+                    "${DAYS[now.dayOfWeek.value - 1]}, ${now.dayOfMonth} ${MONTHS[now.monthValue - 1]}",
+                    color = p.text, fontSize = t(18), maxLines = 1
                 )
-                return@Row
+                Holidays.forDate(now.toLocalDate()).firstOrNull()?.let {
+                    Text(
+                        "🎉 $it", color = p.on, fontSize = t(14), maxLines = 1,
+                        overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = d(3))
+                    )
+                }
             }
-            Text(hm(zdt(last.at)), color = p.text, fontSize = t(36), fontWeight = FontWeight.Bold, lineHeight = t(38))
-            Spacer(Modifier.width(d(6)))
-            Text("${last.ml} мл", color = p.text, fontSize = t(22))
+        }
+        Row(
+            Modifier.align(Alignment.TopEnd),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            BatteryView(battery.first, battery.second)
+            Text(
+                "⚙", color = p.muted, fontSize = t(18),
+                modifier = Modifier
+                    .clip(RoundedCornerShape(d(8)))
+                    .clickable { onSettings() }
+                    .padding(start = d(8), end = d(2))
+            )
+        }
+    }
+}
+
+// ───────────────────────── Свет ─────────────────────────
+
+private data class Rng(val start: Int, val end: Int, val maybe: Boolean)
+
+private fun ranges(slots: List<Slot>): List<Rng> {
+    val res = mutableListOf<Rng>()
+    var i = 0
+    while (i < slots.size) {
+        val s = slots[i]
+        if (s == Slot.OFF || s == Slot.MAYBE) {
+            var j = i
+            while (j < slots.size && slots[j] == s) j++
+            res.add(Rng(i, j, s == Slot.MAYBE))
+            i = j
+        } else i++
+    }
+    return res
+}
+
+private fun slotLbl(k: Int) = "%02d:%02d".format(k / 2, if (k % 2 == 0) 0 else 30)
+
+private fun hoursText(h: Double) =
+    String.format(java.util.Locale.US, "%.1f", h).removeSuffix(".0").replace('.', ',')
+
+/** Период, который начнётся после текущего: (начало, конец, тип) */
+private fun followingPeriod(info: PowerInfo, now: ZonedDateTime, a: PowerNow): Triple<Long, Long?, Slot>? {
+    val startMs = a.nextChangeMs ?: return null
+    val next = a.nextSlot ?: return null
+    val all = (info.today?.slots ?: return null) + (info.tomorrow?.slots ?: emptyList())
+    val dayStart = now.toLocalDate().atStartOfDay(DtekRepo.KYIV).toInstant().toEpochMilli()
+    val i0 = ((startMs - dayStart) / 1_800_000L).toInt()
+    var j = i0
+    while (j < all.size && all[j] == next) j++
+    val end = if (j < all.size && all[j] != Slot.UNKNOWN) dayStart + j * 1_800_000L else null
+    return Triple(startMs, end, next)
+}
+
+@Composable
+private fun PowerPanel(res: Res<PowerInfo>, now: ZonedDateTime, modifier: Modifier) {
+    val p = LocalPalette.current
+    Card(modifier) {
+        val info = res.data
+        if (info == null) {
+            Text("Графік світла", color = p.text, fontSize = t(24), fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(d(8)))
+            Text(
+                res.error ?: "Завантажую графік ДТЕК…",
+                color = if (res.error != null) p.bad else p.muted, fontSize = t(17)
+            )
+            return@Card
+        }
+        val a = analyze(info, now)
+        // Статус
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            val (label, bg, fg) = when (a?.current) {
+                Slot.ON -> Triple("⚡ Світло є", p.on, Color(0xFF1B1B1B))
+                Slot.OFF -> Triple("✕ Світла немає", p.off, Color.White)
+                Slot.MAYBE -> Triple("Можливе відкл.", p.warn, Color(0xFF1B1B1B))
+                else -> Triple("Невідомо", p.track, p.text)
+            }
+            Text(
+                label, color = fg, fontSize = t(18), fontWeight = FontWeight.Bold, maxLines = 1,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(50))
+                    .background(bg)
+                    .padding(horizontal = d(14), vertical = d(5))
+            )
             Spacer(Modifier.weight(1f))
-            val ago = now.toInstant().toEpochMilli() - last.at
-            val c = when {
-                ago < 150 * 60_000 -> p.good
-                ago < 210 * 60_000 -> p.warn
-                else -> p.bad
-            }
-            Text("${durationText(ago)} тому", color = c, fontSize = t(28), fontWeight = FontWeight.Bold)
+            Text(info.groupName, color = p.muted, fontSize = t(14), maxLines = 1)
         }
-        if (last != null) {
+        // Главное: когда изменится
+        if (a?.nextChangeMs != null) {
+            val at = zdt(a.nextChangeMs)
+            val verb = when {
+                a.current == Slot.ON && a.nextSlot == Slot.MAYBE -> "можливо вимкнуть"
+                a.current == Slot.ON -> "вимкнуть"
+                a.nextSlot == Slot.ON -> "увімкнуть"
+                else -> "зміна"
+            }
+            val tomorrow = at.toLocalDate() != now.toLocalDate()
             Text(
-                "останнє годування · сьогодні ${f.todayMl} мл, ${f.todayCount} р." +
-                    (f.lastPoop?.let { " · 💩 " + hm(zdt(it)) } ?: ""),
-                color = p.muted, fontSize = t(15), maxLines = 1, overflow = TextOverflow.Ellipsis
+                verb + (if (tomorrow) " завтра о" else " о"),
+                color = p.muted, fontSize = t(20), modifier = Modifier.padding(top = d(10))
+            )
+            Text(
+                hm(at),
+                color = if (a.nextSlot == Slot.ON) p.on else p.text,
+                fontSize = t(86), fontWeight = FontWeight.Bold, lineHeight = t(88), letterSpacing = t(-2)
+            )
+            val left = a.nextChangeMs - now.toInstant().toEpochMilli()
+            Text(
+                androidx.compose.ui.text.buildAnnotatedString {
+                    append("через ")
+                    pushStyle(androidx.compose.ui.text.SpanStyle(fontWeight = FontWeight.Bold))
+                    append(durationText(left))
+                    pop()
+                },
+                color = p.text, fontSize = t(21)
+            )
+            if (a.periodStartMs != null) {
+                val total = (a.nextChangeMs - a.periodStartMs).toFloat()
+                val done = ((now.toInstant().toEpochMilli() - a.periodStartMs) / total).coerceIn(0f, 1f)
+                Spacer(Modifier.height(d(8)))
+                Canvas(Modifier.fillMaxWidth().height(d(9))) {
+                    val r = CornerRadius(size.height / 2)
+                    drawRoundRect(p.track, cornerRadius = r)
+                    drawRoundRect(
+                        if (a.current == Slot.ON) p.on else p.muted,
+                        size = Size(size.width * done, size.height), cornerRadius = r
+                    )
+                }
+                Text(
+                    (if (a.current == Slot.ON) "світло з " else "без світла з ") + hm(zdt(a.periodStartMs)) +
+                        " · минуло " + durationText(now.toInstant().toEpochMilli() - a.periodStartMs),
+                    color = p.muted, fontSize = t(13), maxLines = 1, modifier = Modifier.padding(top = d(4))
+                )
+            }
+            Spacer(Modifier.weight(1f))
+            // «Далі»: следующий период целиком
+            followingPeriod(info, now, a)?.let { (st, en, kind) ->
+                val isOn = kind == Slot.ON
+                val tint = if (isOn) p.on else p.muted
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(d(12)))
+                        .background(tint.copy(alpha = 0.12f))
+                        .border(1.dp, tint.copy(alpha = 0.35f), RoundedCornerShape(d(12)))
+                        .padding(horizontal = d(12), vertical = d(7)),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(if (isOn) "⚡" else "✕", color = tint, fontSize = t(22))
+                    Spacer(Modifier.width(d(10)))
+                    Column {
+                        Text(
+                            if (isOn) "далі світло буде" else "далі світла не буде",
+                            color = p.muted, fontSize = t(12)
+                        )
+                        Row(verticalAlignment = Alignment.Bottom) {
+                            Text(
+                                hm(zdt(st)) + " – " + (en?.let { hm(zdt(it)) } ?: "…"),
+                                color = p.text, fontSize = t(20), fontWeight = FontWeight.Bold, maxLines = 1
+                            )
+                            en?.let {
+                                Text(
+                                    " · " + hoursText((it - st) / 3_600_000.0) + " год",
+                                    color = tint, fontSize = t(18), maxLines = 1
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        } else if (a != null) {
+            Spacer(Modifier.height(d(12)))
+            Text(
+                if (a.current == Slot.ON) "без відключень до кінця графіка" else "до кінця графіка",
+                color = p.text, fontSize = t(26), fontWeight = FontWeight.Bold
+            )
+            Spacer(Modifier.weight(1f))
+        } else {
+            Spacer(Modifier.height(d(12)))
+            Text("Графік на сьогодні не опубліковано", color = p.muted, fontSize = t(20))
+            Spacer(Modifier.weight(1f))
+        }
+        Spacer(Modifier.height(d(10)))
+        Box(Modifier.fillMaxWidth().height(1.dp).background(p.track))
+        Spacer(Modifier.height(d(8)))
+        DayRanges("Сьогодні", info.today?.slots, now, isToday = true)
+        Spacer(Modifier.height(d(8)))
+        DayRanges("Завтра", info.tomorrow?.slots, now, isToday = false)
+        Spacer(Modifier.height(d(6)))
+        val stale = res.error?.let { " · $it" } ?: ""
+        Text(
+            "ДТЕК ${info.updated.takeLast(5)} · край годинника = 12 год" + (info.notice?.let { " · $it" } ?: "") + stale,
+            color = if (res.error != null) p.warn else p.muted, fontSize = t(11), maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun DayRanges(title: String, slots: List<Slot>?, now: ZonedDateTime, isToday: Boolean) {
+    val p = LocalPalette.current
+    val nowIdx = now.hour * 2 + if (now.minute >= 30) 1 else 0
+    Row(verticalAlignment = Alignment.Bottom) {
+        Text(title, color = p.text, fontSize = t(17), fontWeight = FontWeight.Bold)
+        Spacer(Modifier.weight(1f))
+        if (slots != null) {
+            val off = slots.count { it == Slot.OFF } / 2.0
+            Text(
+                if (off == 0.0) "без відключень 🎉" else "${hoursText(off)} год без світла",
+                color = if (off == 0.0) p.good else p.muted, fontSize = t(13)
+            )
+        }
+    }
+    if (slots == null) {
+        Text("ще не опубліковано", color = p.muted, fontSize = t(17))
+        return
+    }
+    val rs = ranges(slots)
+    if (rs.isEmpty()) return
+    FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(d(10)),
+        verticalArrangement = Arrangement.spacedBy(d(2))
+    ) {
+        rs.forEach { r ->
+            val past = isToday && r.end <= nowIdx
+            val current = isToday && nowIdx >= r.start && nowIdx < r.end
+            Text(
+                slotLbl(r.start) + "–" + slotLbl(r.end),
+                color = when {
+                    past -> p.muted.copy(alpha = 0.55f)
+                    r.maybe -> p.warn
+                    current -> Color.White
+                    else -> p.text
+                },
+                fontSize = t(19), fontWeight = FontWeight.Medium, maxLines = 1, softWrap = false,
+                modifier = if (current) Modifier
+                    .clip(RoundedCornerShape(d(6)))
+                    .background(p.off)
+                    .padding(horizontal = d(5)) else Modifier
             )
         }
     }
 }
 
+// ───────────────────────── Тревога ─────────────────────────
+
 @Composable
-private fun NewsBar(state: UiState, now: ZonedDateTime) {
+private fun AlertCard(state: UiState, now: ZonedDateTime) {
     val p = LocalPalette.current
-    val n = state.news
-    Card(Modifier.fillMaxWidth()) {
+    val a = state.alert.data
+    val active = a?.active == true
+    val nowMs = now.toInstant().toEpochMilli()
+    Card(Modifier.fillMaxWidth(), color = if (active) p.alertBg else p.card) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("📰", fontSize = t(20))
-            Spacer(Modifier.width(d(10)))
-            if (n == null) {
-                Text("Новини: чекаю наступне повідомлення в групі…", color = p.muted, fontSize = t(15))
-                return@Row
+            val dot = when {
+                a == null -> p.muted
+                active -> Color.White
+                else -> p.good
             }
-            Text(
-                n.text.replace('\n', ' '),
-                color = p.text, fontSize = t(17), maxLines = 2, overflow = TextOverflow.Ellipsis,
-                lineHeight = t(21), modifier = Modifier.weight(1f)
-            )
+            Box(
+                Modifier
+                    .size(d(26))
+                    .clip(RoundedCornerShape(50))
+                    .background(dot.copy(alpha = 0.22f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Box(Modifier.size(d(18)).clip(RoundedCornerShape(50)).background(dot))
+            }
             Spacer(Modifier.width(d(12)))
-            Column(horizontalAlignment = Alignment.End) {
-                Text(n.chatTitle, color = p.muted, fontSize = t(12), maxLines = 1)
-                Text(hm(zdt(n.at)), color = p.muted, fontSize = t(13), fontWeight = FontWeight.Bold)
+            Column(Modifier.weight(1f)) {
+                Text(
+                    when {
+                        a == null -> state.alert.error?.let { "Тривоги: $it" } ?: "Тривоги…"
+                        active -> "ТРИВОГА"
+                        else -> "Тривоги немає"
+                    },
+                    color = if (active) Color.White else p.text,
+                    fontSize = t(if (active) 35 else 29), fontWeight = FontWeight.Bold,
+                    lineHeight = t(36), maxLines = 1, overflow = TextOverflow.Ellipsis
+                )
+                if (a != null) {
+                    Text(
+                        a.region + if (active) " · триває ${durationText(nowMs - a.since)} · в укриття!"
+                        else " · вже ${durationText(nowMs - a.since)}",
+                        color = if (active) Color.White else p.muted, fontSize = t(14), maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
             }
         }
-    }
-}
-
-@Composable
-private fun WeatherCard(state: UiState, battery: Pair<Int, Boolean>) {
-    val p = LocalPalette.current
-    Card(Modifier.fillMaxWidth(), color = p.headerBg) {
-        val w = state.weather.data
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            if (w != null) {
-                Text(w.icon, fontSize = t(40), color = p.on)
+        if (a?.oblastActive != null) {
+            Spacer(Modifier.height(d(9)))
+            Box(
+                Modifier.fillMaxWidth().height(1.dp)
+                    .background(if (active) Color.White.copy(alpha = 0.3f) else p.track)
+            )
+            Spacer(Modifier.height(d(8)))
+            val oa = a.oblastActive == true
+            val c = when {
+                active -> Color.White
+                oa -> p.bad
+                else -> p.good
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(d(11)).clip(RoundedCornerShape(50)).background(c))
                 Spacer(Modifier.width(d(8)))
                 Text(
-                    sign(w.temp) + "°",
-                    color = p.headerText, fontSize = t(52), fontWeight = FontWeight.Bold, lineHeight = t(54)
+                    "Київська обл. — " + if (oa) "тривога" else "немає тривоги",
+                    color = if (active) Color.White else if (oa) p.bad else p.muted,
+                    fontSize = t(15), modifier = Modifier.weight(1f), maxLines = 1
                 )
-                Spacer(Modifier.width(d(12)))
-                Column(Modifier.weight(1f)) {
-                    Text(w.description, color = p.headerText, fontSize = t(17), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text("відчув. ${sign(w.feels)}° · ${w.wind} м/с", color = p.headerMuted, fontSize = t(13), maxLines = 1)
-                    Text("${sign(w.min)}° … ${sign(w.max)}° · ☀ ${w.sunrise}–${w.sunset}", color = p.headerMuted, fontSize = t(13), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                if (a.oblastSince > 0) {
+                    Text(
+                        durationText(nowMs - a.oblastSince),
+                        color = if (active) Color.White else p.muted, fontSize = t(15)
+                    )
                 }
-            } else {
-                Text(state.weather.error ?: "погода…", color = p.headerMuted, fontSize = t(16), modifier = Modifier.weight(1f))
             }
         }
-        if (w != null && w.hours.isNotEmpty()) {
-            Spacer(Modifier.height(d(4)))
-            Row(Modifier.fillMaxWidth()) {
+    }
+}
+
+// ───────────────────────── Нижняя полоса ─────────────────────────
+
+@Composable
+private fun BottomStrip(state: UiState) {
+    val p = LocalPalette.current
+    val w = state.weather.data
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .height(d(78))
+            .clip(RoundedCornerShape(d(18)))
+            .background(p.card)
+            .padding(horizontal = d(18)),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        if (w != null) {
+            Text(w.icon, fontSize = t(34), color = p.on)
+            Spacer(Modifier.width(d(8)))
+            Text(sign(w.temp) + "°", color = p.text, fontSize = t(42), fontWeight = FontWeight.Bold)
+            Spacer(Modifier.width(d(12)))
+            Column {
+                Text(w.description, color = p.text, fontSize = t(16), maxLines = 1)
+                Text(
+                    "відчув. ${sign(w.feels)}° · ☀ ${w.sunrise}–${w.sunset}",
+                    color = p.muted, fontSize = t(13), maxLines = 1
+                )
+            }
+            Spacer(Modifier.width(d(14)))
+            Box(Modifier.width(1.dp).height(d(48)).background(p.track))
+            Row(Modifier.weight(1f), horizontalArrangement = Arrangement.SpaceAround) {
                 w.hours.take(6).forEach { h ->
-                    Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("%02d".format(h.hour), color = p.headerMuted, fontSize = t(12))
-                        Text(h.icon, fontSize = t(15), color = p.on)
-                        Text(sign(h.temp) + "°", color = p.headerText, fontSize = t(14), fontWeight = FontWeight.Medium)
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("%02d".format(h.hour), color = p.muted, fontSize = t(12))
+                        Text(h.icon, fontSize = t(14), color = p.on, lineHeight = t(16))
+                        Text(sign(h.temp) + "°", color = p.text, fontSize = t(16), fontWeight = FontWeight.Bold)
                         Text(
                             if (h.precip >= 10) "${h.precip}%" else " ",
-                            color = Color(0xFF6CB4FF), fontSize = t(11)
+                            color = Color(0xFF6CB4FF), fontSize = t(11), lineHeight = t(12)
                         )
                     }
                 }
             }
+        } else {
+            Text(state.weather.error ?: "погода…", color = p.muted, fontSize = t(15), modifier = Modifier.weight(1f))
         }
-    }
-}
-
-@Composable
-private fun RatesCard(state: UiState, battery: Pair<Int, Boolean>, onSettings: () -> Unit) {
-    val p = LocalPalette.current
-    fun f2(v: Double) = String.format(java.util.Locale.US, "%.2f", v).replace('.', ',')
-    Card(Modifier.fillMaxWidth()) {
-        Row(verticalAlignment = Alignment.Bottom, modifier = Modifier.fillMaxWidth()) {
-            val r = state.rates.data
-            if (r != null) {
-                Text("$", color = p.muted, fontSize = t(14))
-                Text(f2(r.usd), color = p.text, fontSize = t(17), fontWeight = FontWeight.Bold)
-                Spacer(Modifier.width(d(10)))
-                Text("€", color = p.muted, fontSize = t(14))
-                Text(f2(r.eur), color = p.text, fontSize = t(17), fontWeight = FontWeight.Bold)
-            } else {
-                Text(state.rates.error ?: "курс…", color = p.muted, fontSize = t(13))
-            }
-            Spacer(Modifier.weight(1f))
-            val b = state.btc.data
-            if (b != null) {
-                Text("₿", color = Color(0xFFF7931A), fontSize = t(15), fontWeight = FontWeight.Bold)
-                Text(
-                    "%,d".format(java.util.Locale.US, b.usd.roundToInt()).replace(',', ' '),
-                    color = p.text, fontSize = t(17), fontWeight = FontWeight.Bold, maxLines = 1
-                )
-                Spacer(Modifier.width(d(4)))
-                val up = b.change24h >= 0
-                Text(
-                    (if (up) "▲" else "▼") + String.format(java.util.Locale.US, "%.1f", abs(b.change24h)).replace('.', ',') + "%",
-                    color = if (up) p.good else p.bad, fontSize = t(12), maxLines = 1,
-                    modifier = Modifier.padding(bottom = d(2))
-                )
-            } else {
-                Text(state.btc.error?.let { "₿ $it" } ?: "₿ …", color = p.muted, fontSize = t(13))
-            }
+        Box(Modifier.width(1.dp).height(d(48)).background(p.track))
+        Spacer(Modifier.width(d(14)))
+        fun f2(v: Double) = String.format(java.util.Locale.US, "%.2f", v).replace('.', ',')
+        val r = state.rates.data
+        if (r != null) {
+            Text("$ ", color = p.muted, fontSize = t(14))
+            Text(f2(r.usd), color = p.text, fontSize = t(18), fontWeight = FontWeight.Bold)
             Spacer(Modifier.width(d(10)))
-            Box(Modifier.padding(bottom = d(3))) { BatteryView(battery.first, battery.second) }
+            Text("€ ", color = p.muted, fontSize = t(14))
+            Text(f2(r.eur), color = p.text, fontSize = t(18), fontWeight = FontWeight.Bold)
+        }
+        val b = state.btc.data
+        if (b != null) {
+            Spacer(Modifier.width(d(12)))
+            Text("₿", color = Color(0xFFF7931A), fontSize = t(16), fontWeight = FontWeight.Bold)
             Text(
-                "⚙",
-                color = p.muted, fontSize = t(20),
-                modifier = Modifier
-                    .clip(RoundedCornerShape(d(8)))
-                    .clickable { onSettings() }
-                    .padding(start = d(8))
+                "%,d".format(java.util.Locale.US, b.usd.roundToInt()).replace(',', ' '),
+                color = p.text, fontSize = t(18), fontWeight = FontWeight.Bold, maxLines = 1
+            )
+            val up = b.change24h >= 0
+            Text(
+                (if (up) " ▲" else " ▼") + String.format(java.util.Locale.US, "%.1f", abs(b.change24h)).replace('.', ',') + "%",
+                color = if (up) p.good else p.bad, fontSize = t(12), maxLines = 1
             )
         }
     }
 }
-
-private fun sign(v: Int) = if (v > 0) "+$v" else "$v"
 
 @Composable
 private fun BatteryView(level: Int, charging: Boolean) {
@@ -341,70 +614,7 @@ private fun BatteryView(level: Int, charging: Boolean) {
     }
 }
 
-@Composable
-private fun AlertCard(state: UiState, now: ZonedDateTime) {
-    val p = LocalPalette.current
-    val a = state.alert.data
-    val active = a?.active == true
-    Card(Modifier.fillMaxWidth(), color = if (active) p.alertBg else p.card) {
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-            Box(
-                Modifier
-                    .size(d(16))
-                    .clip(RoundedCornerShape(50))
-                    .background(
-                        when {
-                            a == null -> p.muted
-                            active -> Color.White
-                            else -> p.good
-                        }
-                    )
-            )
-            Spacer(Modifier.width(d(12)))
-            Text(
-                when {
-                    a == null -> state.alert.error?.let { "Тривоги: $it" } ?: "Тривоги…"
-                    active -> "ТРИВОГА"
-                    else -> "Тривоги немає"
-                },
-                color = if (active) Color.White else p.text,
-                fontSize = t(26), fontWeight = FontWeight.Bold, lineHeight = t(28),
-                modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis
-            )
-            if (a != null) {
-                val since = now.toInstant().toEpochMilli() - a.since
-                Text(
-                    (if (active) "триває " else "") + durationText(since),
-                    color = if (active) Color.White else p.muted,
-                    fontSize = t(17), fontWeight = if (active) FontWeight.Bold else FontWeight.Normal
-                )
-            }
-        }
-        if (a != null) {
-            Spacer(Modifier.height(d(4)))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(a.region, color = if (active) Color.White.copy(alpha = 0.85f) else p.muted, fontSize = t(14))
-                if (a.oblastActive != null) {
-                    Spacer(Modifier.width(d(14)))
-                    Box(
-                        Modifier
-                            .size(d(10))
-                            .clip(RoundedCornerShape(50))
-                            .background(if (a.oblastActive) (if (active) Color.White else p.bad) else p.good)
-                    )
-                    Spacer(Modifier.width(d(6)))
-                    Text(
-                        "Київська обл.: " + if (a.oblastActive) "тривога" else "немає",
-                        color = if (active) Color.White.copy(alpha = 0.85f) else (if (a.oblastActive) p.bad else p.muted),
-                        fontSize = t(14)
-                    )
-                }
-            }
-        }
-    }
-}
-
-// ───────────────────────── Свет ─────────────────────────
+private fun sign(v: Int) = if (v > 0) "+$v" else "$v"
 
 private data class PowerNow(
     val current: Slot,
@@ -435,213 +645,6 @@ private fun analyze(info: PowerInfo, now: ZonedDateTime): PowerNow? {
 
 private fun same(a: Slot, b: Slot) = a == b || (a != Slot.ON && b != Slot.ON && a != Slot.UNKNOWN && b != Slot.UNKNOWN && a == b)
 
-/** Интервалы без света: «08:00–09:00» */
-private fun offRanges(slots: List<Slot>): List<Pair<String, Boolean>> {
-    val res = mutableListOf<Pair<String, Boolean>>()
-    var i = 0
-    fun lbl(k: Int) = "%02d:%02d".format(k / 2, if (k % 2 == 0) 0 else 30)
-    while (i < slots.size) {
-        val s = slots[i]
-        if (s == Slot.OFF || s == Slot.MAYBE) {
-            var j = i
-            while (j < slots.size && slots[j] == s) j++
-            res.add("${lbl(i)}–${lbl(j)}" to (s == Slot.MAYBE))
-            i = j
-        } else i++
-    }
-    return res
-}
-
-private fun offHours(slots: List<Slot>) = slots.count { it == Slot.OFF } / 2.0
-
-@Composable
-private fun PowerCard(res: Res<PowerInfo>, now: ZonedDateTime, modifier: Modifier) {
-    val p = LocalPalette.current
-    Card(modifier.fillMaxWidth()) {
-        val info = res.data
-        val a = info?.let { analyze(it, now) }
-        BoxWithConstraints(Modifier.fillMaxSize()) {
-        val digitalH = d(96)
-        val dialSize = minOf(maxHeight - digitalH, maxWidth * 0.55f)
-        Row(Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
-            // Стрелочные часы, по краю — свет на 12 часов; под ними — то же время цифрами
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Box(Modifier.size(dialSize), contentAlignment = Alignment.Center) {
-                    Column(
-                        Modifier.fillMaxSize(),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center
-                    ) {
-                        Text(
-                            "${DAYS_SHORT[now.dayOfWeek.value - 1]}, ${now.dayOfMonth} ${MONTHS[now.monthValue - 1]}",
-                            color = p.muted, fontSize = t(14)
-                        )
-                        Spacer(Modifier.height(dialSize * 0.4f))
-                    }
-                    AnalogClock(info, now)
-                }
-                Row(verticalAlignment = Alignment.Bottom) {
-                    Text(
-                        hm(now), color = p.text, fontSize = t(60), fontWeight = FontWeight.Bold,
-                        lineHeight = t(62)
-                    )
-                    Text(
-                        ":%02d".format(now.second), color = p.muted, fontSize = t(26),
-                        modifier = Modifier.padding(start = d(2), bottom = d(8))
-                    )
-                }
-            }
-            if (info == null) {
-                Spacer(Modifier.width(d(16)))
-                Column(Modifier.weight(1f)) {
-                    Text("Графік світла", color = p.text, fontSize = t(22), fontWeight = FontWeight.Bold)
-                    Spacer(Modifier.height(d(8)))
-                    Text(
-                        res.error ?: "Завантажую графік ДТЕК…",
-                        color = if (res.error != null) p.bad else p.muted, fontSize = t(16)
-                    )
-                }
-                return@Row
-            }
-            Spacer(Modifier.width(d(16)))
-            Column(Modifier.weight(1f).fillMaxHeight()) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    val (label, bg, fg) = when (a?.current) {
-                        Slot.ON -> Triple("Світло є", p.on, Color(0xFF1B1B1B))
-                        Slot.OFF -> Triple("Світла немає", p.off, Color.White)
-                        Slot.MAYBE -> Triple("Можливе відключення", p.warn, Color(0xFF1B1B1B))
-                        else -> Triple("Невідомо", p.track, p.text)
-                    }
-                    Text(
-                        label, color = fg, fontSize = t(18), fontWeight = FontWeight.Bold,
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(50))
-                            .background(bg)
-                            .padding(horizontal = d(12), vertical = d(4))
-                    )
-                    Spacer(Modifier.weight(1f))
-                    Text(info.groupName, color = p.muted, fontSize = t(15))
-                }
-                Spacer(Modifier.height(d(6)))
-                if (a?.nextChangeMs != null) {
-                    val at = zdt(a.nextChangeMs)
-                    val dayPrefix = if (at.toLocalDate() != now.toLocalDate()) "завтра " else ""
-                    val verb = when {
-                        a.current == Slot.ON && a.nextSlot == Slot.MAYBE -> "можливо вимкнуть"
-                        a.current == Slot.ON -> "вимкнуть"
-                        a.nextSlot == Slot.ON -> "увімкнуть"
-                        else -> "зміна"
-                    }
-                    Text(verb, color = p.muted, fontSize = t(20))
-                    Row(verticalAlignment = Alignment.Bottom) {
-                        Text(
-                            dayPrefix + hm(at),
-                            color = if (a.current == Slot.ON) p.text else p.on,
-                            fontSize = t(52), fontWeight = FontWeight.Bold, lineHeight = t(54)
-                        )
-                        Spacer(Modifier.width(d(10)))
-                        val left = a.nextChangeMs - now.toInstant().toEpochMilli()
-                        Text(
-                            "через ${durationText(left)}", color = p.text, fontSize = t(20),
-                            modifier = Modifier.padding(bottom = d(7))
-                        )
-                    }
-                    // Прогресс текущего периода
-                    if (a.periodStartMs != null) {
-                        val total = (a.nextChangeMs - a.periodStartMs).toFloat()
-                        val done = ((now.toInstant().toEpochMilli() - a.periodStartMs) / total).coerceIn(0f, 1f)
-                        Spacer(Modifier.height(d(4)))
-                        Canvas(Modifier.fillMaxWidth().height(d(8))) {
-                            val r = CornerRadius(size.height / 2)
-                            drawRoundRect(p.track, cornerRadius = r)
-                            drawRoundRect(
-                                if (a.current == Slot.ON) p.on else p.muted,
-                                size = Size(size.width * done, size.height), cornerRadius = r
-                            )
-                        }
-                        Text(
-                            "з ${hm(zdt(a.periodStartMs))} · минуло ${durationText(now.toInstant().toEpochMilli() - a.periodStartMs)}",
-                            color = p.muted, fontSize = t(13)
-                        )
-                    }
-                } else if (a != null) {
-                    Text(
-                        if (a.current == Slot.ON) "без відключень до кінця графіка" else "до кінця графіка",
-                        color = p.text, fontSize = t(22), fontWeight = FontWeight.Bold
-                    )
-                } else {
-                    Text("Графік на сьогодні не опубліковано", color = p.muted, fontSize = t(18))
-                }
-                Spacer(Modifier.weight(1f))
-                RangesLine("Сьогодні", info.today?.slots, now, isToday = true)
-                Spacer(Modifier.height(d(4)))
-                RangesLine("Завтра", info.tomorrow?.slots, now, isToday = false)
-                Spacer(Modifier.height(d(4)))
-                val stale = res.error?.let { " · $it" } ?: ""
-                val notice = info.notice?.replace(Regex("\\s*\\(.*?\\)"), "")
-                Text(
-                    (Holidays.forDate(now.toLocalDate()).firstOrNull()?.let { "🎉 $it · " } ?: "") + "край годинника — світло на 12 год · " + (notice?.let { "$it · " } ?: "") + "ДТЕК ${info.updated}$stale",
-                    color = if (res.error != null) p.warn else p.muted, fontSize = t(11), maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-        }
-        }
-    }
-}
-
-@Composable
-private fun RangesLine(title: String, slots: List<Slot>?, now: ZonedDateTime, isToday: Boolean) {
-    val p = LocalPalette.current
-    val nowIdx = now.hour * 2 + if (now.minute >= 30) 1 else 0
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Text(
-            title, color = p.text, fontSize = t(15), fontWeight = FontWeight.Bold,
-            modifier = Modifier.width(d(84))
-        )
-        if (slots == null) {
-            Text("ще не опубліковано", color = p.muted, fontSize = t(13))
-            return@Row
-        }
-        val ranges = offRanges(slots)
-        if (ranges.isEmpty()) {
-            Text("без відключень 🎉", color = p.good, fontSize = t(14))
-            return@Row
-        }
-        Text(
-            "${String.format(java.util.Locale.US, "%.1f", offHours(slots)).removeSuffix(".0").replace('.', ',')} год без світла",
-            color = p.muted, fontSize = t(14), modifier = Modifier.padding(end = d(8))
-        )
-    }
-    if (slots != null) {
-        val ranges = offRanges(slots)
-        if (ranges.isNotEmpty()) {
-            // Прошедшие интервалы сегодня — бледнее
-            val text = androidx.compose.ui.text.buildAnnotatedString {
-                ranges.forEachIndexed { i, (r, maybe) ->
-                    val endIdx = r.substringAfter("–").let { it.substring(0, 2).toInt() * 2 + if (it.endsWith("30")) 1 else 0 }
-                    val past = isToday && endIdx <= nowIdx
-                    pushStyle(
-                        androidx.compose.ui.text.SpanStyle(
-                            color = when {
-                                past -> p.muted.copy(alpha = 0.55f)
-                                maybe -> p.warn
-                                else -> p.text
-                            }
-                        )
-                    )
-                    append(r)
-                    pop()
-                    if (i < ranges.size - 1) append("   ")
-                }
-            }
-            Text(
-                text, fontSize = t(16), fontWeight = FontWeight.Medium, maxLines = 3,
-                overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = d(84))
-            )
-        }
-    }
-}
 
 /**
  * Обычные стрелочные часы. По краю циферблата — свет на ближайшие 12 часов:
@@ -741,118 +744,3 @@ private fun AnalogClock(info: PowerInfo?, now: ZonedDateTime) {
     }
 }
 
-// ───────────────────────── Лимиты ─────────────────────────
-
-@Composable
-private fun LimitsCard(
-    icon: String,
-    title: String,
-    accent: Color,
-    res: Res<LimitsInfo>,
-    loggedIn: Boolean,
-    now: ZonedDateTime,
-    onSettings: () -> Unit,
-    modifier: Modifier,
-) {
-    val p = LocalPalette.current
-    Card(modifier.fillMaxWidth()) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                Modifier
-                    .clip(RoundedCornerShape(d(7)))
-                    .background(accent)
-                    .padding(horizontal = d(7), vertical = d(1))
-            ) {
-                Text(icon, color = Color.White, fontSize = t(18), fontWeight = FontWeight.Bold)
-            }
-            Spacer(Modifier.width(d(10)))
-            Text(title, color = p.text, fontSize = t(26), fontWeight = FontWeight.Bold)
-            Spacer(Modifier.weight(1f))
-            res.data?.plan?.let { Text(it, color = p.muted, fontSize = t(14)) }
-        }
-        Spacer(Modifier.height(d(8)))
-        if (!loggedIn) {
-            Spacer(Modifier.weight(1f))
-            Text(
-                "Увійдіть у налаштуваннях →",
-                color = accent, fontSize = t(18),
-                modifier = Modifier.clickable { onSettings() }
-            )
-            Spacer(Modifier.weight(1f))
-            return@Card
-        }
-        val data = res.data
-        if (data == null) {
-            Text(res.error ?: "Завантаження…", color = if (res.error != null) p.bad else p.muted, fontSize = t(16))
-            return@Card
-        }
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.SpaceEvenly) {
-            data.windows.take(3).forEach { w -> WindowRow(w, accent, now) }
-            if (data.windows.isEmpty()) Text("Немає даних про ліміти", color = p.muted, fontSize = t(16))
-        }
-        if (res.error != null) {
-            Text("⚠ ${res.error}", color = p.warn, fontSize = t(12), maxLines = 1, overflow = TextOverflow.Ellipsis)
-        }
-    }
-}
-
-@Composable
-private fun WindowRow(w: Window, accent: Color, now: ZonedDateTime) {
-    val p = LocalPalette.current
-    val nowMs = now.toInstant().toEpochMilli()
-    val used = w.usedPercent.coerceIn(0.0, 100.0)
-    val elapsed: Double? = if (w.resetsAt != null && w.windowMs > 0) {
-        (1.0 - (w.resetsAt - nowMs).toDouble() / w.windowMs).coerceIn(0.0, 1.0) * 100
-    } else null
-    val reserve = elapsed?.let { it - used }
-    Column {
-        Row(verticalAlignment = Alignment.Bottom) {
-            Text(w.label, color = p.text, fontSize = t(19))
-            Spacer(Modifier.weight(1f))
-            Text(
-                "${used.roundToInt()}%",
-                color = if (used >= 90) p.bad else p.text,
-                fontSize = t(32), fontWeight = FontWeight.Bold
-            )
-        }
-        Spacer(Modifier.height(d(4)))
-        Canvas(
-            Modifier
-                .fillMaxWidth()
-                .height(d(18))
-        ) {
-            val r = CornerRadius(size.height / 2)
-            drawRoundRect(p.track, cornerRadius = r)
-            val fw = (size.width * (used / 100.0)).toFloat().coerceAtLeast(if (used > 0) size.height else 0f)
-            val barColor = when {
-                used >= 90 -> p.bad
-                reserve != null && reserve < -10 -> p.warn
-                else -> accent
-            }
-            drawRoundRect(barColor, size = Size(fw.coerceAtMost(size.width), size.height), cornerRadius = r)
-            if (elapsed != null) {
-                val x = (size.width * (elapsed / 100.0)).toFloat()
-                drawRect(
-                    p.text,
-                    topLeft = Offset(x - 1.25.dp.toPx(), -3.dp.toPx()),
-                    size = Size(2.5.dp.toPx(), size.height + 6.dp.toPx())
-                )
-            }
-        }
-        Spacer(Modifier.height(d(4)))
-        val resetTxt = w.resetsAt?.let {
-            val z = zdt(it)
-            val sameDay = z.toLocalDate() == now.toLocalDate()
-            "до " + (if (sameDay) "" else DAYS_SHORT[z.dayOfWeek.value - 1] + " ") + hm(z)
-        } ?: ""
-        val resTxt = reserve?.let {
-            val v = it.roundToInt()
-            if (v >= 0) "запас $v%" else "перевищення ${abs(v)}%"
-        } ?: ""
-        Text(
-            listOf(resetTxt, resTxt).filter { it.isNotBlank() }.joinToString(" · "),
-            color = if (reserve != null && reserve < 0) p.warn else p.muted,
-            fontSize = t(14)
-        )
-    }
-}
