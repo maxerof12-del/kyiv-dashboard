@@ -133,7 +133,6 @@ fun Dashboard(state: UiState, battery: Pair<Int, Boolean>, onSettings: () -> Uni
                     verticalArrangement = Arrangement.spacedBy(d(12))
                 ) {
                     PowerCard(state.power, now, Modifier.weight(1f).clickable { onRefresh() })
-                    if (state.tgFeedChat != 0L) FeedCard(state, now)
                 }
                 Column(
                     Modifier
@@ -147,7 +146,6 @@ fun Dashboard(state: UiState, battery: Pair<Int, Boolean>, onSettings: () -> Uni
                     RatesCard(state, battery, onSettings)
                 }
             }
-            if (state.tgNewsChat != 0L) NewsBar(state, now)
             }
         }
     }
@@ -463,27 +461,35 @@ private fun PowerCard(res: Res<PowerInfo>, now: ZonedDateTime, modifier: Modifie
         val info = res.data
         val a = info?.let { analyze(it, now) }
         BoxWithConstraints(Modifier.fillMaxSize()) {
-        val dialSize = minOf(maxHeight, maxWidth * 0.52f)
+        val digitalH = d(96)
+        val dialSize = minOf(maxHeight - digitalH, maxWidth * 0.55f)
         Row(Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
-            // Круглые часы: внешнее кольцо — свет сегодня, внутреннее — завтра
-            Box(
-                Modifier.size(dialSize),
-                contentAlignment = Alignment.Center
-            ) {
-                // Подписи под стрелками: дата сверху, цифровое время снизу
-                Column(
-                    Modifier.fillMaxSize(),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center
-                ) {
-                    Text(
-                        "${DAYS_SHORT[now.dayOfWeek.value - 1]}, ${now.dayOfMonth} ${MONTHS[now.monthValue - 1]}",
-                        color = p.muted, fontSize = t(14)
-                    )
-                    Spacer(Modifier.height(dialSize * 0.36f))
-                    Text(hm(now), color = p.text, fontSize = t(22), fontWeight = FontWeight.Bold)
+            // Стрелочные часы, по краю — свет на 12 часов; под ними — то же время цифрами
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Box(Modifier.size(dialSize), contentAlignment = Alignment.Center) {
+                    Column(
+                        Modifier.fillMaxSize(),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Text(
+                            "${DAYS_SHORT[now.dayOfWeek.value - 1]}, ${now.dayOfMonth} ${MONTHS[now.monthValue - 1]}",
+                            color = p.muted, fontSize = t(14)
+                        )
+                        Spacer(Modifier.height(dialSize * 0.4f))
+                    }
+                    AnalogClock(info, now)
                 }
-                AnalogClock(info, now)
+                Row(verticalAlignment = Alignment.Bottom) {
+                    Text(
+                        hm(now), color = p.text, fontSize = t(60), fontWeight = FontWeight.Bold,
+                        lineHeight = t(62)
+                    )
+                    Text(
+                        ":%02d".format(now.second), color = p.muted, fontSize = t(26),
+                        modifier = Modifier.padding(start = d(2), bottom = d(8))
+                    )
+                }
             }
             if (info == null) {
                 Spacer(Modifier.width(d(16)))

@@ -99,7 +99,6 @@ class DashViewModel(app: Application) : AndroidViewModel(app) {
         codexJob = loop(2 * 60_000L) { refreshCodex() }
         loop(60 * 60_000L) { refreshRates() }
         loop(2 * 60_000L) { refreshBtc() }
-        loop(5_000L) { refreshTelegram() }
     }
 
     private fun loop(period: Long, block: suspend () -> Unit): Job = viewModelScope.launch {
