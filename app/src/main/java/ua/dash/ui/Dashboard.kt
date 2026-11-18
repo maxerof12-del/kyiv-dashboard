@@ -157,43 +157,37 @@ fun Dashboard(state: UiState, battery: Pair<Int, Boolean>, onSettings: () -> Uni
 private fun FeedCard(state: UiState, now: ZonedDateTime) {
     val p = LocalPalette.current
     val f = state.feed
+    val last = f?.last
     Card(Modifier.fillMaxWidth()) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("🍼", fontSize = t(30))
-            Spacer(Modifier.width(d(10)))
-            val last = f?.last
+            Text("🍼", fontSize = t(24))
+            Spacer(Modifier.width(d(8)))
             if (last == null) {
-                Column(Modifier.weight(1f)) {
-                    Text("Годування", color = p.muted, fontSize = t(14))
-                    Text(
-                        state.tgError ?: "чекаю перший запис у групі…",
-                        color = if (state.tgError != null) p.warn else p.text, fontSize = t(16)
-                    )
-                }
+                Text(
+                    state.tgError ?: "Годування: чекаю перший запис у групі…",
+                    color = if (state.tgError != null) p.warn else p.muted, fontSize = t(15),
+                    modifier = Modifier.weight(1f)
+                )
                 return@Row
             }
-            Column(Modifier.weight(1f)) {
-                Text("останнє годування", color = p.muted, fontSize = t(13))
-                Row(verticalAlignment = Alignment.Bottom) {
-                    Text(hm(zdt(last.at)), color = p.text, fontSize = t(32), fontWeight = FontWeight.Bold, lineHeight = t(34))
-                    Spacer(Modifier.width(d(8)))
-                    Text("${last.ml} мл", color = p.text, fontSize = t(18), modifier = Modifier.padding(bottom = d(3)))
-                }
+            Text(hm(zdt(last.at)), color = p.text, fontSize = t(28), fontWeight = FontWeight.Bold, lineHeight = t(30))
+            Spacer(Modifier.width(d(6)))
+            Text("${last.ml} мл", color = p.text, fontSize = t(17))
+            Spacer(Modifier.weight(1f))
+            val ago = now.toInstant().toEpochMilli() - last.at
+            val c = when {
+                ago < 150 * 60_000 -> p.good
+                ago < 210 * 60_000 -> p.warn
+                else -> p.bad
             }
-            Column(horizontalAlignment = Alignment.End) {
-                val ago = now.toInstant().toEpochMilli() - last.at
-                val c = when {
-                    ago < 150 * 60_000 -> p.good
-                    ago < 210 * 60_000 -> p.warn
-                    else -> p.bad
-                }
-                Text("${durationText(ago)} тому", color = c, fontSize = t(22), fontWeight = FontWeight.Bold)
-                Text(
-                    "сьогодні ${f?.todayMl ?: 0} мл · ${f?.todayCount ?: 0} р." +
-                        (f?.lastPoop?.let { "  💩 " + hm(zdt(it)) } ?: ""),
-                    color = p.muted, fontSize = t(13)
-                )
-            }
+            Text("${durationText(ago)} тому", color = c, fontSize = t(20), fontWeight = FontWeight.Bold)
+        }
+        if (last != null) {
+            Text(
+                "останнє годування · сьогодні ${f.todayMl} мл, ${f.todayCount} р." +
+                    (f.lastPoop?.let { " · 💩 " + hm(zdt(it)) } ?: ""),
+                color = p.muted, fontSize = t(13), maxLines = 1, overflow = TextOverflow.Ellipsis
+            )
         }
     }
 }
@@ -240,15 +234,15 @@ private fun WeatherCard(state: UiState, battery: Pair<Int, Boolean>) {
                 Spacer(Modifier.width(d(12)))
                 Column(Modifier.weight(1f)) {
                     Text(w.description, color = p.headerText, fontSize = t(17), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text("відчув. ${sign(w.feels)}° · ${w.wind} м/с", color = p.headerMuted, fontSize = t(14), maxLines = 1)
-                    Text("${sign(w.min)}° … ${sign(w.max)}° · ☀ ${w.sunrise}–${w.sunset}", color = p.headerMuted, fontSize = t(14), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text("відчув. ${sign(w.feels)}° · ${w.wind} м/с", color = p.headerMuted, fontSize = t(13), maxLines = 1)
+                    Text("${sign(w.min)}° … ${sign(w.max)}° · ☀ ${w.sunrise}–${w.sunset}", color = p.headerMuted, fontSize = t(13), maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             } else {
                 Text(state.weather.error ?: "погода…", color = p.headerMuted, fontSize = t(16), modifier = Modifier.weight(1f))
             }
         }
         if (w != null && w.hours.isNotEmpty()) {
-            Spacer(Modifier.height(d(8)))
+            Spacer(Modifier.height(d(4)))
             Row(Modifier.fillMaxWidth()) {
                 w.hours.take(6).forEach { h ->
                     Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -263,14 +257,6 @@ private fun WeatherCard(state: UiState, battery: Pair<Int, Boolean>) {
                 }
             }
         }
-        val hol = Holidays.forDate(java.time.LocalDate.now(DtekRepo.KYIV))
-        if (hol.isNotEmpty()) {
-            Spacer(Modifier.height(d(4)))
-            Text(
-                hol.joinToString(" · "), color = p.headerMuted, fontSize = t(13), maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
     }
 }
 
@@ -282,33 +268,33 @@ private fun RatesCard(state: UiState, battery: Pair<Int, Boolean>, onSettings: (
         Row(verticalAlignment = Alignment.Bottom, modifier = Modifier.fillMaxWidth()) {
             val r = state.rates.data
             if (r != null) {
-                Text("$ ", color = p.muted, fontSize = t(15))
-                Text(f2(r.usd), color = p.text, fontSize = t(20), fontWeight = FontWeight.Bold)
-                Spacer(Modifier.width(d(12)))
-                Text("€ ", color = p.muted, fontSize = t(15))
-                Text(f2(r.eur), color = p.text, fontSize = t(20), fontWeight = FontWeight.Bold)
+                Text("$", color = p.muted, fontSize = t(14))
+                Text(f2(r.usd), color = p.text, fontSize = t(17), fontWeight = FontWeight.Bold)
+                Spacer(Modifier.width(d(10)))
+                Text("€", color = p.muted, fontSize = t(14))
+                Text(f2(r.eur), color = p.text, fontSize = t(17), fontWeight = FontWeight.Bold)
             } else {
                 Text(state.rates.error ?: "курс…", color = p.muted, fontSize = t(13))
             }
             Spacer(Modifier.weight(1f))
             val b = state.btc.data
             if (b != null) {
-                Text("₿ ", color = Color(0xFFF7931A), fontSize = t(17), fontWeight = FontWeight.Bold)
+                Text("₿", color = Color(0xFFF7931A), fontSize = t(15), fontWeight = FontWeight.Bold)
                 Text(
-                    "%,d".format(java.util.Locale.US, b.usd.roundToInt()).replace(',', ' ') + " $",
-                    color = p.text, fontSize = t(20), fontWeight = FontWeight.Bold
+                    "%,d".format(java.util.Locale.US, b.usd.roundToInt()).replace(',', ' '),
+                    color = p.text, fontSize = t(17), fontWeight = FontWeight.Bold, maxLines = 1
                 )
-                Spacer(Modifier.width(d(6)))
+                Spacer(Modifier.width(d(4)))
                 val up = b.change24h >= 0
                 Text(
                     (if (up) "▲" else "▼") + String.format(java.util.Locale.US, "%.1f", abs(b.change24h)).replace('.', ',') + "%",
-                    color = if (up) p.good else p.bad, fontSize = t(14),
+                    color = if (up) p.good else p.bad, fontSize = t(12), maxLines = 1,
                     modifier = Modifier.padding(bottom = d(2))
                 )
             } else {
                 Text(state.btc.error?.let { "₿ $it" } ?: "₿ …", color = p.muted, fontSize = t(13))
             }
-            Spacer(Modifier.width(d(12)))
+            Spacer(Modifier.width(d(10)))
             Box(Modifier.padding(bottom = d(3))) { BatteryView(battery.first, battery.second) }
             Text(
                 "⚙",
@@ -392,10 +378,10 @@ private fun AlertCard(state: UiState, now: ZonedDateTime) {
                 )
                 if (a != null) {
                     Text(
-                        (if (a.region == "м. Київ") "м. Київ" else a.region) +
-                            if (a.oblastActive == true) " · в області тривога" else "",
+                        a.region + (if (a.oblastActive == true) " · в області тривога" else "") +
+                            Holidays.forDate(now.toLocalDate()).firstOrNull()?.let { " · $it" }.orEmpty(),
                         color = if (active) Color.White.copy(alpha = 0.85f) else (if (a.oblastActive == true) p.warn else p.muted),
-                        fontSize = t(16)
+                        fontSize = t(16), maxLines = 1, overflow = TextOverflow.Ellipsis
                     )
                 }
             }
@@ -542,7 +528,7 @@ private fun PowerCard(res: Res<PowerInfo>, now: ZonedDateTime, modifier: Modifie
                         Text(
                             dayPrefix + hm(at),
                             color = if (a.current == Slot.ON) p.text else p.on,
-                            fontSize = t(58), fontWeight = FontWeight.Bold, lineHeight = t(60)
+                            fontSize = t(52), fontWeight = FontWeight.Bold, lineHeight = t(54)
                         )
                         Spacer(Modifier.width(d(10)))
                         val left = a.nextChangeMs - now.toInstant().toEpochMilli()
@@ -641,7 +627,7 @@ private fun RangesLine(title: String, slots: List<Slot>?, now: ZonedDateTime, is
                 }
             }
             Text(
-                text, fontSize = t(18), fontWeight = FontWeight.Medium, maxLines = 3,
+                text, fontSize = t(16), fontWeight = FontWeight.Medium, maxLines = 3,
                 overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = d(84))
             )
         }
