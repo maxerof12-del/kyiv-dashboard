@@ -596,8 +596,6 @@ private fun AnalogClock(info: PowerInfo?, now: ZonedDateTime) {
         /** угол на 12-часовом циферблате для момента (минуты от начала суток) */
         fun ang(minOfDay: Double) = -90.0 + (minOfDay % 720.0) / 720.0 * 360.0
 
-        // Подложка циферблата
-        drawCircle(p.card2, radius = R - ringW - 2.dp.toPx(), center = Offset(cx, cy))
 
         // Полоса света: от «сейчас» на 12 часов вперёд
         val nowMin = now.hour * 60 + now.minute + now.second / 60.0
