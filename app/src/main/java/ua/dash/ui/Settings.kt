@@ -98,6 +98,20 @@ fun SettingsScreen(vm: DashViewModel, state: UiState, openUrl: (String) -> Unit,
                             ". IP телефону має починатися так само (перші три числа).",
                         color = p.muted, fontSize = 13.sp
                     )
+                    var code by remember { mutableStateOf(vm.prefs.botCode) }
+                    Text(
+                        "Код бота: його показує Termux при запуску бота («Код для дашборда: …») " +
+                            "або бот у Telegram на команду /dash. З кодом дані йдуть через інтернет — Wi-Fi не важливий.",
+                        color = p.muted, fontSize = 13.sp
+                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        OutlinedTextField(
+                            value = code, onValueChange = { code = it },
+                            label = { Text("Код бота") }, singleLine = true, modifier = Modifier.weight(1f)
+                        )
+                        Spacer(Modifier.width(10.dp))
+                        Button(onClick = { vm.setBotCode(code) }) { Text("Зберегти код") }
+                    }
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         OutlinedTextField(
                             value = host, onValueChange = { host = it },

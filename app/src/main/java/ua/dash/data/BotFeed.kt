@@ -22,6 +22,8 @@ data class BotFeed(
     val goalMl: Int,
     val host: String,
     val fetchedAt: Long,
+    /** «Сутки» бота (YYYY-MM-DD) — к ним относится todayMl */
+    val day: String = "",
 )
 
 /** Данные бота «Кормление», который работает в Termux на телефоне в том же Wi-Fi. */
@@ -31,7 +33,20 @@ object BotFeedRepo {
     fun fetch(host: String): BotFeed {
         val h = host.trim().removePrefix("http://").removeSuffix("/")
         val url = if (h.contains(":")) "http://$h/dash.json" else "http://$h:$PORT/dash.json"
-        val j = JSONObject(Http.get(url))
+        return parse(JSONObject(Http.get(url)), h)
+    }
+
+    /** Через интернет: бот публикует данные в ntfy.sh/kyivdash-<код> */
+    fun fetchCloud(code: String): BotFeed {
+        val c = code.trim().lowercase()
+        val text = Http.get("https://ntfy.sh/kyivdash-$c/json?poll=1&since=latest")
+        val line = text.lines().lastOrNull { it.contains("\"message\"") }
+            ?: throw IllegalStateException("бот ще не надсилав дані (перевірте код)")
+        val msg = JSONObject(line).getString("message")
+        return parse(JSONObject(msg), "інтернет")
+    }
+
+    private fun parse(j: JSONObject, h: String): BotFeed {
         if (j.optString("app") != "feeding_bot") throw IllegalStateException("це не бот годування")
         val lf = j.optJSONObject("last_feed")
         return BotFeed(
@@ -44,7 +59,8 @@ object BotFeedRepo {
             lastPoop = if (j.isNull("last_poop")) null else j.optString("last_poop").let(::parseIso),
             goalMl = j.optInt("goal_ml", 0),
             host = h,
-            fetchedAt = System.currentTimeMillis(),
+            fetchedAt = j.optString("now").let(::parseIso) ?: System.currentTimeMillis(),
+            day = j.optString("day"),
         )
     }
 

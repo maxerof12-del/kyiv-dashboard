@@ -121,6 +121,9 @@ class Prefs(context: Context) {
     var feedEnabled: Boolean
         get() = sp.getBoolean("feedEnabled", true)
         set(v) = sp.edit().putBoolean("feedEnabled", v).apply()
+    var botCode: String
+        get() = str("botCode")
+        set(v) = put("botCode", v)
     var botHost: String
         get() = str("botHost")
         set(v) = put("botHost", v)

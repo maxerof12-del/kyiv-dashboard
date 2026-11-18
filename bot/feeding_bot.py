@@ -56,6 +56,24 @@ BIRTH_YEAR, BIRTH_MONTH, BIRTH_DAY = _private("BIRTH_YEAR, BIRTH_MONTH, BIRTH_DA
 HOT_TEMP = 28
 MIN_ML, MAX_ML = 1, 1500
 DASH_PORT = 8765  # порт для дашборда на планшете (тот же Wi-Fi)
+DASH_RELAY = "https://ntfy.sh/kyivdash-"  # передача данных дашборду через интернет
+
+
+def _dash_code():
+    code = _private("DASH_CODE", "")
+    if code:
+        return code
+    alphabet = "abcdefghjkmnpqrstuvwxyz23456789"
+    code = "".join(random.SystemRandom().choice(alphabet) for _ in range(10))
+    try:
+        with open(_os.path.join(_HERE, "bot_private.txt"), "a", encoding="utf-8") as f:
+            f.write(f'\nDASH_CODE = "{code}"\n')
+    except Exception as e:
+        print("Не смог сохранить код дашборда:", e)
+    return code
+
+
+DASH_CODE = _dash_code()
 # =======================
 
 CONS_LABELS = {"liquid": "жидкий 💧", "mush": "кашицей 🟡", "thick": "густой 🟤", "hard": "твёрдый 🌰"}
@@ -888,6 +906,10 @@ async def cmd_tip(update, context):
     await update.message.reply_text(f"💡 Нам {months} мес: {tip}" if tip else "Совет не найден.")
 
 
+async def cmd_dash(update, context):
+    await update.message.reply_text(f"Код для дашборда: {DASH_CODE}")
+
+
 async def cmd_undo(update, context):
     row = delete_last(update.effective_chat.id)
     if row:
@@ -1159,6 +1181,29 @@ class DashHandler(BaseHTTPRequestHandler):
         pass  # не засорять экран Termux
 
 
+def _relay_loop():
+    import urllib.request
+    last_body, last_sent = None, 0
+    while True:
+        try:
+            d = dash_data()
+            d.pop("now", None)
+            body = json.dumps(d, ensure_ascii=False, sort_keys=True)
+            if body != last_body or time.time() - last_sent > 600:
+                d["now"] = datetime.now(TZ).isoformat()
+                req = urllib.request.Request(
+                    DASH_RELAY + DASH_CODE,
+                    data=json.dumps(d, ensure_ascii=False).encode("utf-8"),
+                    method="POST",
+                    headers={"Title": "feeding", "Cache": "yes"},
+                )
+                urllib.request.urlopen(req, timeout=15).read()
+                last_body, last_sent = body, time.time()
+        except Exception as e:
+            print("Дашборд через интернет: ошибка отправки (повторю):", e)
+        time.sleep(30)
+
+
 def start_dash_server():
     try:
         srv = ThreadingHTTPServer(("0.0.0.0", DASH_PORT), DashHandler)
@@ -1169,12 +1214,18 @@ def start_dash_server():
     print(f"Данные для дашборда: порт {DASH_PORT}")
 
 
+def start_dash_relay():
+    threading.Thread(target=_relay_loop, daemon=True).start()
+    print(f"Код для дашборда: {DASH_CODE}  (впишите его в дашборде: ⚙ → Годування)")
+
+
 def main():
     if not BOT_TOKEN:
         print("Не найден токен: положите рядом feeding_bot_old.py (старую версию) или bot_private.txt со строкой BOT_TOKEN = \"...\"")
         return
     init_db()
     start_dash_server()
+    start_dash_relay()
     while True:
         try:
             app = (
@@ -1198,6 +1249,7 @@ def main():
             app.add_handler(CommandHandler("month30", cmd_month30))
             app.add_handler(CommandHandler("tip", cmd_tip))
             app.add_handler(CommandHandler("undo", cmd_undo))
+            app.add_handler(CommandHandler("dash", cmd_dash))
             app.add_handler(CommandHandler("reset", cmd_reset))
             app.add_handler(CallbackQueryHandler(on_button))
             app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_text))

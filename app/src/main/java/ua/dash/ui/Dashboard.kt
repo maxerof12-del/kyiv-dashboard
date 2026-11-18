@@ -256,7 +256,9 @@ private fun FeedBox(state: UiState, now: ZonedDateTime) {
                 Text("тому", color = c, fontSize = t(14))
             }
         }
-        val stale = state.botFeed.error?.let { " · ⚠ $it" } ?: ""
+        val oldMin = (nowMs - f.fetchedAt) / 60_000
+        val stale = (state.botFeed.error?.let { " · ⚠ $it" } ?: "") +
+            (if (oldMin >= 20) " · ⚠ бот мовчить ${durationText(nowMs - f.fetchedAt)}" else "")
         Text(
             "сьогодні ${f.todayMl.roundToInt()} мл, ${f.todayCount} р." +
                 (f.lastPoop?.let { " · 💩 " + hm(zdt(it)) } ?: "") + stale,

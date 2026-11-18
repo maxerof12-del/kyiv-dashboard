@@ -192,6 +192,21 @@ class DashViewModel(app: Application) : AndroidViewModel(app) {
 
     suspend fun refreshBotFeed(forceDiscover: Boolean = false) {
         if (!prefs.feedEnabled) return
+        // 1) Через интернет по коду — работает с любым роутером
+        if (prefs.botCode.isNotBlank() && !forceDiscover) {
+            try {
+                val f = withContext(Dispatchers.IO) { BotFeedRepo.fetchCloud(prefs.botCode) }
+                _state.update { it.copy(botFeed = Res(f)) }
+                return
+            } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                if (prefs.botHost.isBlank()) {
+                    _state.update { it.copy(botFeed = it.botFeed.copy(error = msg(e), loading = false)) }
+                    return
+                }
+            }
+        }
+        // 2) Напрямую по Wi-Fi
         val now = System.currentTimeMillis()
         if (forceDiscover || prefs.botHost.isBlank() || botFails >= 3) {
             if (!forceDiscover && now - lastDiscover < 60_000) {
@@ -228,6 +243,11 @@ class DashViewModel(app: Application) : AndroidViewModel(app) {
     fun setBotHost(h: String) {
         prefs.botHost = h.trim()
         botFails = 0
+        viewModelScope.launch { refreshBotFeed() }
+    }
+
+    fun setBotCode(c: String) {
+        prefs.botCode = c.trim().lowercase()
         viewModelScope.launch { refreshBotFeed() }
     }
 
