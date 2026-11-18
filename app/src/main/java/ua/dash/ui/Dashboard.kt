@@ -616,7 +616,7 @@ private fun FeedBig(state: UiState, now: ZonedDateTime, modifier: Modifier) {
         // Прогресс к суточной цели
         if (f.goalMl > 0) {
             val frac = (f.todayMl / f.goalMl).toFloat().coerceIn(0f, 1f)
-            Canvas(Modifier.fillMaxWidth().height(d(10))) {
+            Canvas(Modifier.fillMaxWidth().height(d(16))) {
                 val r = CornerRadius(size.height / 2)
                 drawRoundRect(p.track, cornerRadius = r)
                 drawRoundRect(c, size = Size(size.width * frac, size.height), cornerRadius = r)
