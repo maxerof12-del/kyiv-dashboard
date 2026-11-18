@@ -161,7 +161,8 @@ private fun ClockCard(
             .padding(d(12))
     ) {
         BoxWithConstraints(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            val dial = minOf(maxWidth, maxHeight - d(118))
+            val showFeed = state.feedEnabled
+            val dial = minOf(maxWidth, maxHeight - d(118) - if (showFeed) d(84) else 0.dp)
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Box(Modifier.size(dial)) { AnalogClock(state.power.data, now) }
                 Row(verticalAlignment = Alignment.Bottom) {
@@ -184,6 +185,10 @@ private fun ClockCard(
                         overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = d(3))
                     )
                 }
+                if (showFeed) {
+                    Spacer(Modifier.height(d(8)))
+                    FeedBox(state, now)
+                }
             }
         }
         Row(
@@ -199,6 +204,64 @@ private fun ClockCard(
                     .padding(start = d(8), end = d(2))
             )
         }
+    }
+}
+
+// ───────────────────────── Кормление (бот в Termux) ─────────────────────────
+
+@Composable
+private fun FeedBox(state: UiState, now: ZonedDateTime) {
+    val p = LocalPalette.current
+    val f = state.botFeed.data
+    val nowMs = now.toInstant().toEpochMilli()
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(d(12)))
+            .background(p.card2)
+            .padding(horizontal = d(12), vertical = d(7))
+    ) {
+        if (f?.lastAt == null) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("🍼", fontSize = t(22))
+                Spacer(Modifier.width(d(8)))
+                Text(
+                    when {
+                        state.botSearching -> "шукаю бота в Wi-Fi…"
+                        f != null -> "записів ще немає"
+                        else -> state.botFeed.error ?: "підключаюсь до бота…"
+                    },
+                    color = p.muted, fontSize = t(15), maxLines = 1
+                )
+            }
+            return@Column
+        }
+        val ago = nowMs - f.lastAt
+        val c = when {
+            ago < 150 * 60_000 -> p.good
+            ago < 210 * 60_000 -> p.warn
+            else -> p.bad
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("🍼", fontSize = t(22))
+            Spacer(Modifier.width(d(6)))
+            Text(hm(zdt(f.lastAt)), color = p.text, fontSize = t(26), fontWeight = FontWeight.Bold, lineHeight = t(28))
+            f.lastMl?.let {
+                Text(
+                    " · " + (if (it % 1.0 == 0.0) it.toInt().toString() else it.toString()) + " мл",
+                    color = p.text, fontSize = t(17), maxLines = 1
+                )
+            }
+            Spacer(Modifier.weight(1f))
+            Text("${durationText(ago)} тому", color = c, fontSize = t(18), fontWeight = FontWeight.Bold, maxLines = 1)
+        }
+        val stale = state.botFeed.error?.let { " · ⚠ $it" } ?: ""
+        Text(
+            "сьогодні ${f.todayMl.roundToInt()} мл, ${f.todayCount} р." +
+                (f.lastPoop?.let { " · 💩 " + hm(zdt(it)) } ?: "") + stale,
+            color = if (stale.isNotEmpty()) p.warn else p.muted, fontSize = t(13), maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
     }
 }
 

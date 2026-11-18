@@ -74,6 +74,37 @@ fun SettingsScreen(vm: DashViewModel, state: UiState, openUrl: (String) -> Unit,
                     )
                 }
 
+                Section("Годування (бот на телефоні)", p) {
+                    var host by remember { mutableStateOf(vm.prefs.botHost) }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("Показувати годування", color = p.text, fontSize = 16.sp, modifier = Modifier.weight(1f))
+                        Switch(checked = state.feedEnabled, onCheckedChange = { vm.setFeedEnabled(it) })
+                    }
+                    Text(
+                        "Дані беруться з вашого бота «Кормление» (Termux на телефоні). Телефон і планшет мають бути в одному Wi-Fi. " +
+                            "Адресу телефону дашборд знаходить сам.",
+                        color = p.muted, fontSize = 13.sp
+                    )
+                    Text(
+                        when {
+                            state.botSearching -> "Шукаю…"
+                            state.botFeed.data != null -> "Підключено: ${state.botFeed.data.host} ✓"
+                            else -> state.botFeed.error ?: "Ще не підключено"
+                        },
+                        color = if (state.botFeed.data != null) p.good else p.muted, fontSize = 14.sp
+                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        OutlinedTextField(
+                            value = host, onValueChange = { host = it },
+                            label = { Text("IP телефону (необов'язково)") }, singleLine = true, modifier = Modifier.weight(1f)
+                        )
+                        Spacer(Modifier.width(10.dp))
+                        Button(onClick = { vm.setBotHost(host) }) { Text("Зберегти") }
+                        Spacer(Modifier.width(10.dp))
+                        OutlinedButton(onClick = { vm.findBot() }) { Text("Знайти автоматично") }
+                    }
+                }
+
                 Section("Карта", p) {
                     var url by remember { mutableStateOf(state.mapUrl) }
                     Text(

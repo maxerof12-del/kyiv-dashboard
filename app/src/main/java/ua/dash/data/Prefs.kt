@@ -117,6 +117,14 @@ class Prefs(context: Context) {
         get() = sp.getLong("tgLastPoop", 0L)
         set(v) = sp.edit().putLong("tgLastPoop", v).apply()
 
+    // Бот кормления (Termux на телефоне в том же Wi-Fi)
+    var feedEnabled: Boolean
+        get() = sp.getBoolean("feedEnabled", true)
+        set(v) = sp.edit().putBoolean("feedEnabled", v).apply()
+    var botHost: String
+        get() = str("botHost")
+        set(v) = put("botHost", v)
+
     // Экран
     var lightTheme: Boolean
         get() = sp.getBoolean("lightTheme", false)

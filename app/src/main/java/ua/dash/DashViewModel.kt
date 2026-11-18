@@ -19,6 +19,8 @@ import ua.dash.data.AlertState
 import ua.dash.data.ExtrasRepo
 import ua.dash.data.Rates
 import ua.dash.data.AlertsRepo
+import ua.dash.data.BotFeed
+import ua.dash.data.BotFeedRepo
 import ua.dash.data.FeedInfo
 import ua.dash.data.NewsInfo
 import ua.dash.data.TelegramRepo
@@ -46,6 +48,9 @@ data class UiState(
     val rates: Res<Rates> = Res(),
     val air: Res<Air> = Res(),
     val btc: Res<Btc> = Res(),
+    val botFeed: Res<BotFeed> = Res(),
+    val feedEnabled: Boolean = true,
+    val botSearching: Boolean = false,
     val feed: FeedInfo? = null,
     val news: NewsInfo? = null,
     val tgEnabled: Boolean = false,
@@ -77,6 +82,7 @@ class DashViewModel(app: Application) : AndroidViewModel(app) {
             mapUrl = prefs.mapUrl,
             homeLat = prefs.lat,
             homeLon = prefs.lon,
+            feedEnabled = prefs.feedEnabled,
             feed = TelegramRepo.feedInfo(prefs),
             news = TelegramRepo.newsInfo(prefs),
             tgEnabled = prefs.tgToken.isNotBlank(),
@@ -99,6 +105,7 @@ class DashViewModel(app: Application) : AndroidViewModel(app) {
         codexJob = loop(2 * 60_000L) { refreshCodex() }
         loop(60 * 60_000L) { refreshRates() }
         loop(2 * 60_000L) { refreshBtc() }
+        loop(10_000L) { refreshBotFeed() }
     }
 
     private fun loop(period: Long, block: suspend () -> Unit): Job = viewModelScope.launch {
@@ -180,6 +187,52 @@ class DashViewModel(app: Application) : AndroidViewModel(app) {
     fun setNewsChat(id: Long) { prefs.tgNewsChat = id; prefs.tgNews = ""; _state.update { it.copy(tgNewsChat = id, news = null) } }
     fun clearFeeds() { TelegramRepo.clearFeeds(prefs); _state.update { it.copy(feed = TelegramRepo.feedInfo(prefs)) } }
 
+    private var botFails = 0
+    private var lastDiscover = 0L
+
+    suspend fun refreshBotFeed(forceDiscover: Boolean = false) {
+        if (!prefs.feedEnabled) return
+        val now = System.currentTimeMillis()
+        if (forceDiscover || prefs.botHost.isBlank() || botFails >= 3) {
+            if (!forceDiscover && now - lastDiscover < 60_000) {
+                if (prefs.botHost.isBlank()) return
+            } else {
+                lastDiscover = now
+                _state.update { it.copy(botSearching = true) }
+                val found = try { BotFeedRepo.discover() } catch (e: Exception) { null }
+                _state.update { it.copy(botSearching = false) }
+                if (found != null) { prefs.botHost = found; botFails = 0 }
+                else if (prefs.botHost.isBlank()) {
+                    _state.update { it.copy(botFeed = it.botFeed.copy(error = "бота не знайдено в Wi-Fi", loading = false)) }
+                    return
+                }
+            }
+        }
+        try {
+            val f = withContext(Dispatchers.IO) { BotFeedRepo.fetch(prefs.botHost) }
+            botFails = 0
+            _state.update { it.copy(botFeed = Res(f)) }
+        } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+            botFails++
+            _state.update { it.copy(botFeed = it.botFeed.copy(error = "бот недоступний", loading = false)) }
+        }
+    }
+
+    fun setFeedEnabled(v: Boolean) {
+        prefs.feedEnabled = v
+        _state.update { it.copy(feedEnabled = v) }
+        if (v) viewModelScope.launch { refreshBotFeed() }
+    }
+
+    fun setBotHost(h: String) {
+        prefs.botHost = h.trim()
+        botFails = 0
+        viewModelScope.launch { refreshBotFeed() }
+    }
+
+    fun findBot() { viewModelScope.launch { refreshBotFeed(forceDiscover = true) } }
+
     suspend fun refreshBtc() = load({ it.btc }, { s, r -> s.copy(btc = r) }) { ExtrasRepo.btc() }
 
     suspend fun refreshAir() = load({ it.air }, { s, r -> s.copy(air = r) }) { ExtrasRepo.air(prefs.lat, prefs.lon) }
@@ -220,6 +273,7 @@ class DashViewModel(app: Application) : AndroidViewModel(app) {
         launch { refreshCodex() }
         launch { refreshRates() }
         launch { refreshBtc() }
+        launch { refreshBotFeed() }
     }
 
     // ───── Настройки ─────
