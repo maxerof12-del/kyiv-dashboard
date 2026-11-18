@@ -84,6 +84,32 @@ class Prefs(context: Context) {
         get() = str("mapUrl", DEFAULT_MAP)
         set(v) = put("mapUrl", v)
 
+    // Telegram
+    var tgToken: String
+        get() = str("tgToken")
+        set(v) = put("tgToken", v)
+    var tgOffset: Long
+        get() = sp.getLong("tgOffset", 0L)
+        set(v) = sp.edit().putLong("tgOffset", v).apply()
+    var tgFeedChat: Long
+        get() = sp.getLong("tgFeedChat", 0L)
+        set(v) = sp.edit().putLong("tgFeedChat", v).apply()
+    var tgNewsChat: Long
+        get() = sp.getLong("tgNewsChat", 0L)
+        set(v) = sp.edit().putLong("tgNewsChat", v).apply()
+    var tgNews: String
+        get() = str("tgNews")
+        set(v) = put("tgNews", v)
+    var tgFeeds: String
+        get() = str("tgFeeds")
+        set(v) = put("tgFeeds", v)
+    var tgChats: String
+        get() = str("tgChats")
+        set(v) = put("tgChats", v)
+    var tgLastPoop: Long
+        get() = sp.getLong("tgLastPoop", 0L)
+        set(v) = sp.edit().putLong("tgLastPoop", v).apply()
+
     // Экран
     var lightTheme: Boolean
         get() = sp.getBoolean("lightTheme", false)

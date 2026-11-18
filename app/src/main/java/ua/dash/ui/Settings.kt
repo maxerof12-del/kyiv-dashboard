@@ -74,6 +74,52 @@ fun SettingsScreen(vm: DashViewModel, state: UiState, openUrl: (String) -> Unit,
                     )
                 }
 
+                Section("Telegram: годування та новини", p) {
+                    var token by remember { mutableStateOf(vm.prefs.tgToken) }
+                    Text(
+                        "1) У Telegram відкрийте @BotFather → /newbot → придумайте ім'я → скопіюйте токен.\n" +
+                            "2) Там же: /setprivacy → оберіть бота → Disable (щоб бот бачив усі повідомлення).\n" +
+                            "3) Додайте бота в групу з годуваннями і в групу/канал з новинами (у канал — адміністратором).\n" +
+                            "4) Вставте токен нижче, напишіть будь-що в кожну групу — вони з'являться у списку.",
+                        color = p.muted, fontSize = 13.sp
+                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        OutlinedTextField(
+                            value = token, onValueChange = { token = it },
+                            label = { Text("Токен бота") }, singleLine = true, modifier = Modifier.weight(1f)
+                        )
+                        Spacer(Modifier.width(10.dp))
+                        Button(onClick = { vm.setTgToken(token) }) { Text("Зберегти") }
+                    }
+                    state.tgBot?.let { Text("Бот: $it ✓", color = p.good, fontSize = 14.sp) }
+                    state.tgError?.let { Text(it, color = p.bad, fontSize = 14.sp) }
+                    if (state.tgChats.isEmpty()) {
+                        Text("Групи ще не знайдені — напишіть повідомлення в групі, де є бот.", color = p.muted, fontSize = 13.sp)
+                    }
+                    state.tgChats.forEach { c ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(c.title.ifBlank { c.id.toString() }, color = p.text, fontSize = 15.sp, modifier = Modifier.weight(1f))
+                            val isFeed = state.tgFeedChat == c.id
+                            val isNews = state.tgNewsChat == c.id
+                            Button(
+                                onClick = { vm.setFeedChat(if (isFeed) 0 else c.id) },
+                                colors = if (isFeed) ButtonDefaults.buttonColors() else ButtonDefaults.outlinedButtonColors()
+                            ) { Text("🍼 Годування") }
+                            Spacer(Modifier.width(8.dp))
+                            Button(
+                                onClick = { vm.setNewsChat(if (isNews) 0 else c.id) },
+                                colors = if (isNews) ButtonDefaults.buttonColors() else ButtonDefaults.outlinedButtonColors()
+                            ) { Text("📰 Новини") }
+                        }
+                    }
+                    Text(
+                        "Розуміє записи «14:40-70», «14:40 70», «70» (тоді час = час повідомлення), «70 мл о 14:40». 💩 — окремо. " +
+                            "Повідомлення ботів Telegram іншим ботам не показує, тому рахуємо самі за записами людей.",
+                        color = p.muted, fontSize = 13.sp
+                    )
+                    OutlinedButton(onClick = { vm.clearFeeds() }) { Text("Очистити історію годувань") }
+                }
+
                 Section("Карта", p) {
                     var url by remember { mutableStateOf(state.mapUrl) }
                     Text(

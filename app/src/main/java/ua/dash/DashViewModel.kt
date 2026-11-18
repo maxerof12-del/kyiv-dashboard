@@ -19,6 +19,10 @@ import ua.dash.data.AlertState
 import ua.dash.data.ExtrasRepo
 import ua.dash.data.Rates
 import ua.dash.data.AlertsRepo
+import ua.dash.data.FeedInfo
+import ua.dash.data.NewsInfo
+import ua.dash.data.TelegramRepo
+import ua.dash.data.TgChat
 import ua.dash.data.Btc
 import ua.dash.data.ClaudeAuth
 import ua.dash.data.CodexAuth
@@ -42,6 +46,14 @@ data class UiState(
     val rates: Res<Rates> = Res(),
     val air: Res<Air> = Res(),
     val btc: Res<Btc> = Res(),
+    val feed: FeedInfo? = null,
+    val news: NewsInfo? = null,
+    val tgEnabled: Boolean = false,
+    val tgError: String? = null,
+    val tgChats: List<TgChat> = emptyList(),
+    val tgFeedChat: Long = 0,
+    val tgNewsChat: Long = 0,
+    val tgBot: String? = null,
     val mapUrl: String = "",
     val homeLat: Double = 50.4545,
     val homeLon: Double = 30.3985,
@@ -65,6 +77,12 @@ class DashViewModel(app: Application) : AndroidViewModel(app) {
             mapUrl = prefs.mapUrl,
             homeLat = prefs.lat,
             homeLon = prefs.lon,
+            feed = TelegramRepo.feedInfo(prefs),
+            news = TelegramRepo.newsInfo(prefs),
+            tgEnabled = prefs.tgToken.isNotBlank(),
+            tgChats = TelegramRepo.loadChats(prefs),
+            tgFeedChat = prefs.tgFeedChat,
+            tgNewsChat = prefs.tgNewsChat,
         )
     )
     val state: StateFlow<UiState> = _state
@@ -81,6 +99,7 @@ class DashViewModel(app: Application) : AndroidViewModel(app) {
         codexJob = loop(2 * 60_000L) { refreshCodex() }
         loop(60 * 60_000L) { refreshRates() }
         loop(2 * 60_000L) { refreshBtc() }
+        loop(5_000L) { refreshTelegram() }
     }
 
     private fun loop(period: Long, block: suspend () -> Unit): Job = viewModelScope.launch {
@@ -123,6 +142,44 @@ class DashViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     suspend fun refreshRates() = load({ it.rates }, { s, r -> s.copy(rates = r) }) { ExtrasRepo.rates() }
+
+    suspend fun refreshTelegram() {
+        if (prefs.tgToken.isBlank()) return
+        try {
+            withContext(Dispatchers.IO) { TelegramRepo.poll(prefs) }
+            _state.update { it.copy(tgError = null) }
+        } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+            _state.update { it.copy(tgError = msg(e)) }
+        }
+        _state.update {
+            it.copy(
+                feed = TelegramRepo.feedInfo(prefs),
+                news = TelegramRepo.newsInfo(prefs),
+                tgChats = TelegramRepo.loadChats(prefs),
+                tgEnabled = true,
+            )
+        }
+    }
+
+    fun setTgToken(token: String) {
+        prefs.tgToken = token.trim()
+        prefs.tgOffset = 0
+        _state.update { it.copy(tgEnabled = token.isNotBlank(), tgBot = null, tgError = null) }
+        viewModelScope.launch {
+            try {
+                val name = withContext(Dispatchers.IO) { TelegramRepo.botName(prefs.tgToken) }
+                _state.update { it.copy(tgBot = name) }
+                refreshTelegram()
+            } catch (e: Exception) {
+                _state.update { it.copy(tgError = msg(e)) }
+            }
+        }
+    }
+
+    fun setFeedChat(id: Long) { prefs.tgFeedChat = id; _state.update { it.copy(tgFeedChat = id) } }
+    fun setNewsChat(id: Long) { prefs.tgNewsChat = id; prefs.tgNews = ""; _state.update { it.copy(tgNewsChat = id, news = null) } }
+    fun clearFeeds() { TelegramRepo.clearFeeds(prefs); _state.update { it.copy(feed = TelegramRepo.feedInfo(prefs)) } }
 
     suspend fun refreshBtc() = load({ it.btc }, { s, r -> s.copy(btc = r) }) { ExtrasRepo.btc() }
 

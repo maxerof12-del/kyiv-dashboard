@@ -115,11 +115,15 @@ fun Dashboard(state: UiState, battery: Pair<Int, Boolean>, onSettings: () -> Uni
     ) {
         val scale = minOf(maxWidth.value / 960f, maxHeight.value / 600f)
         CompositionLocalProvider(LocalPalette provides p, LocalScale provides scale) {
-            Row(
+            Column(
                 Modifier
                     .fillMaxSize()
                     .offset(x = shift.dp, y = (-shift).dp)
                     .padding(d(14)),
+                verticalArrangement = Arrangement.spacedBy(d(10))
+            ) {
+            Row(
+                Modifier.fillMaxWidth().weight(1f),
                 horizontalArrangement = Arrangement.spacedBy(d(12))
             ) {
                 Column(
@@ -138,28 +142,83 @@ fun Dashboard(state: UiState, battery: Pair<Int, Boolean>, onSettings: () -> Uni
                     verticalArrangement = Arrangement.spacedBy(d(10))
                 ) {
                     WeatherCard(state, battery)
+                    if (state.tgFeedChat != 0L) FeedCard(state, now)
                     MapCard(state.mapUrl, state.homeLat, state.homeLon, Modifier.weight(1f).fillMaxWidth())
-                    RatesCard(state)
-                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        val hol = Holidays.forDate(now.toLocalDate())
-                        Text(
-                            hol.joinToString(" · "),
-                            color = p.muted, fontSize = t(13), maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f).padding(start = d(6))
-                        )
-                        BatteryView(battery.first, battery.second)
-                        Spacer(Modifier.width(d(10)))
-                        Text(
-                            "⚙",
-                            color = p.muted, fontSize = t(18),
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(d(8)))
-                                .clickable { onSettings() }
-                                .padding(horizontal = d(8), vertical = d(0))
-                        )
-                    }
+                    RatesCard(state, battery, onSettings)
                 }
+            }
+            if (state.tgNewsChat != 0L) NewsBar(state, now)
+            }
+        }
+    }
+}
+
+@Composable
+private fun FeedCard(state: UiState, now: ZonedDateTime) {
+    val p = LocalPalette.current
+    val f = state.feed
+    Card(Modifier.fillMaxWidth()) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("🍼", fontSize = t(30))
+            Spacer(Modifier.width(d(10)))
+            val last = f?.last
+            if (last == null) {
+                Column(Modifier.weight(1f)) {
+                    Text("Годування", color = p.muted, fontSize = t(14))
+                    Text(
+                        state.tgError ?: "чекаю перший запис у групі…",
+                        color = if (state.tgError != null) p.warn else p.text, fontSize = t(16)
+                    )
+                }
+                return@Row
+            }
+            Column(Modifier.weight(1f)) {
+                Text("останнє годування", color = p.muted, fontSize = t(13))
+                Row(verticalAlignment = Alignment.Bottom) {
+                    Text(hm(zdt(last.at)), color = p.text, fontSize = t(32), fontWeight = FontWeight.Bold, lineHeight = t(34))
+                    Spacer(Modifier.width(d(8)))
+                    Text("${last.ml} мл", color = p.text, fontSize = t(18), modifier = Modifier.padding(bottom = d(3)))
+                }
+            }
+            Column(horizontalAlignment = Alignment.End) {
+                val ago = now.toInstant().toEpochMilli() - last.at
+                val c = when {
+                    ago < 150 * 60_000 -> p.good
+                    ago < 210 * 60_000 -> p.warn
+                    else -> p.bad
+                }
+                Text("${durationText(ago)} тому", color = c, fontSize = t(22), fontWeight = FontWeight.Bold)
+                Text(
+                    "сьогодні ${f?.todayMl ?: 0} мл · ${f?.todayCount ?: 0} р." +
+                        (f?.lastPoop?.let { "  💩 " + hm(zdt(it)) } ?: ""),
+                    color = p.muted, fontSize = t(13)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun NewsBar(state: UiState, now: ZonedDateTime) {
+    val p = LocalPalette.current
+    val n = state.news
+    Card(Modifier.fillMaxWidth()) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("📰", fontSize = t(20))
+            Spacer(Modifier.width(d(10)))
+            if (n == null) {
+                Text("Новини: чекаю наступне повідомлення в групі…", color = p.muted, fontSize = t(15))
+                return@Row
+            }
+            Text(
+                n.text.replace('\n', ' '),
+                color = p.text, fontSize = t(17), maxLines = 2, overflow = TextOverflow.Ellipsis,
+                lineHeight = t(21), modifier = Modifier.weight(1f)
+            )
+            Spacer(Modifier.width(d(12)))
+            Column(horizontalAlignment = Alignment.End) {
+                Text(n.chatTitle, color = p.muted, fontSize = t(12), maxLines = 1)
+                Text(hm(zdt(n.at)), color = p.muted, fontSize = t(13), fontWeight = FontWeight.Bold)
             }
         }
     }
@@ -204,11 +263,19 @@ private fun WeatherCard(state: UiState, battery: Pair<Int, Boolean>) {
                 }
             }
         }
+        val hol = Holidays.forDate(java.time.LocalDate.now(DtekRepo.KYIV))
+        if (hol.isNotEmpty()) {
+            Spacer(Modifier.height(d(4)))
+            Text(
+                hol.joinToString(" · "), color = p.headerMuted, fontSize = t(13), maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
     }
 }
 
 @Composable
-private fun RatesCard(state: UiState) {
+private fun RatesCard(state: UiState, battery: Pair<Int, Boolean>, onSettings: () -> Unit) {
     val p = LocalPalette.current
     fun f2(v: Double) = String.format(java.util.Locale.US, "%.2f", v).replace('.', ',')
     Card(Modifier.fillMaxWidth()) {
@@ -241,6 +308,16 @@ private fun RatesCard(state: UiState) {
             } else {
                 Text(state.btc.error?.let { "₿ $it" } ?: "₿ …", color = p.muted, fontSize = t(13))
             }
+            Spacer(Modifier.width(d(12)))
+            Box(Modifier.padding(bottom = d(3))) { BatteryView(battery.first, battery.second) }
+            Text(
+                "⚙",
+                color = p.muted, fontSize = t(20),
+                modifier = Modifier
+                    .clip(RoundedCornerShape(d(8)))
+                    .clickable { onSettings() }
+                    .padding(start = d(8))
+            )
         }
     }
 }
