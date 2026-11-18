@@ -171,7 +171,7 @@ private fun ClockCard(
             .padding(d(12))
     ) {
         BoxWithConstraints(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            val dial = minOf(maxWidth, maxHeight - d(118))
+            val dial = minOf(maxWidth, maxHeight - d(138))
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Box(Modifier.size(dial)) { AnalogClock(state.power.data, now) }
                 Row(verticalAlignment = Alignment.Bottom) {
@@ -193,6 +193,14 @@ private fun ClockCard(
                         "🎉 $it", color = p.on, fontSize = t(14), maxLines = 1,
                         overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = d(3))
                     )
+                }
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = d(5))) {
+                    Box(Modifier.size(d(18), d(8)).clip(RoundedCornerShape(d(3))).background(p.on))
+                    Text(" світло   ", color = p.muted, fontSize = t(12))
+                    Box(Modifier.size(d(18), d(8)).clip(RoundedCornerShape(d(3))).background(p.off))
+                    Text(" немає   ", color = p.muted, fontSize = t(12))
+                    Box(Modifier.size(d(18), d(2)).background(p.muted.copy(alpha = 0.6f)))
+                    Text(" графіка ще немає", color = p.muted, fontSize = t(12))
                 }
             }
         }
@@ -873,7 +881,8 @@ private fun AnalogClock(info: PowerInfo?, now: ZonedDateTime) {
         val endMin = nowMin + 720.0
         val tl = Offset(cx - rRing, cy - rRing)
         val sz = Size(2 * rRing, 2 * rRing)
-        drawCircle(p.track, radius = rRing, center = Offset(cx, cy), style = androidx.compose.ui.graphics.drawscope.Stroke(ringW))
+        // Тонкая бледная линия = графика ещё нет; толстые сегменты поверх — по графику
+        drawCircle(p.muted.copy(alpha = 0.45f), radius = rRing, center = Offset(cx, cy), style = androidx.compose.ui.graphics.drawscope.Stroke(ringW * 0.16f))
         for (i in all.indices) {
             val s0 = i * 30.0
             val s1 = s0 + 30.0
@@ -884,8 +893,8 @@ private fun AnalogClock(info: PowerInfo?, now: ZonedDateTime) {
                 Slot.ON -> p.on
                 Slot.OFF -> p.off
                 Slot.MAYBE -> p.maybe
-                Slot.UNKNOWN -> p.track
-            }
+                Slot.UNKNOWN -> null
+            } ?: continue
             drawArc(
                 c, startAngle = ang(from).toFloat(), sweepAngle = ((to - from) / 720.0 * 360.0).toFloat() + 0.3f,
                 useCenter = false, topLeft = tl, size = sz,
