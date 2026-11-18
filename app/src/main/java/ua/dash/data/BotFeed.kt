@@ -48,6 +48,16 @@ object BotFeedRepo {
         )
     }
 
+    /** IP планшета в Wi-Fi (для подсказки в настройках) */
+    fun myIps(): List<String> = try {
+        NetworkInterface.getNetworkInterfaces().toList()
+            .filter { it.isUp && !it.isLoopback }
+            .flatMap { it.inetAddresses.toList() }
+            .filterIsInstance<Inet4Address>()
+            .filter { it.isSiteLocalAddress }
+            .map { it.hostAddress!! }
+    } catch (e: Exception) { emptyList() }
+
     private fun localPrefixes(): List<String> = try {
         NetworkInterface.getNetworkInterfaces().toList()
             .filter { it.isUp && !it.isLoopback }

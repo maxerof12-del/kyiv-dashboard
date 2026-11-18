@@ -93,6 +93,11 @@ fun SettingsScreen(vm: DashViewModel, state: UiState, openUrl: (String) -> Unit,
                         },
                         color = if (state.botFeed.data != null) p.good else p.muted, fontSize = 14.sp
                     )
+                    Text(
+                        "IP цього планшета: " + ua.dash.data.BotFeedRepo.myIps().joinToString().ifBlank { "немає Wi-Fi" } +
+                            ". IP телефону має починатися так само (перші три числа).",
+                        color = p.muted, fontSize = 13.sp
+                    )
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         OutlinedTextField(
                             value = host, onValueChange = { host = it },

@@ -28,22 +28,20 @@ import kotlinx.coroutines.delay
 private const val HOOK_JS = """
 (function(){
   if (window.__dashHook) return; window.__dashHook = true;
-  var _m;
-  try {
-    Object.defineProperty(window, 'maplibregl', {
-      configurable: true,
-      get: function(){ return _m; },
-      set: function(v){
-        _m = v;
-        try {
-          var O = v.Map;
-          var W = function(opts){ var m = new O(opts); window.__dashMap = m; return m; };
-          W.prototype = O.prototype; Object.setPrototypeOf(W, O);
-          v.Map = W;
-        } catch(e) {}
-      }
-    });
-  } catch(e) {}
+  // Не подменяем конструктор карты — только запоминаем экземпляр, когда сайт сам вызывает map.on(...)
+  function patch(v){
+    try {
+      if (!v || !v.Map || !v.Map.prototype || v.Map.prototype.__dashPatched) return;
+      var proto = v.Map.prototype, orig = proto.on;
+      proto.__dashPatched = true;
+      proto.on = function(){ try { if (!window.__dashMap) window.__dashMap = this; } catch(e) {} return orig.apply(this, arguments); };
+    } catch(e) {}
+  }
+  var t = 0;
+  (function poll(){
+    try { if (window.maplibregl) { patch(window.maplibregl); return; } } catch(e) {}
+    if (++t < 400) setTimeout(poll, 25);
+  })();
 })();
 """
 
@@ -75,7 +73,7 @@ private fun afterLoadJs(lat: Double, lon: Double, zoom: Double) = """
       } catch(e) {}
       return;
     }
-    if (tries < 40) setTimeout(go, 500);
+    if (tries < 80) setTimeout(go, 500);
   })();
 })();
 """
@@ -95,6 +93,9 @@ fun MapCard(url: String, lat: Double, lon: Double, modifier: Modifier = Modifier
             settings.loadWithOverviewMode = true
             settings.builtInZoomControls = true
             settings.displayZoomControls = false
+            settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
+            settings.userAgentString = settings.userAgentString.replace("; wv)", ")")
+            WebView.setWebContentsDebuggingEnabled(true)
             if (isAlarmMap && WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
                 WebViewCompat.addDocumentStartJavaScript(this, HOOK_JS, setOf("*"))
             }
