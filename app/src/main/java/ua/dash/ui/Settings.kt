@@ -124,25 +124,6 @@ fun SettingsScreen(vm: DashViewModel, state: UiState, openUrl: (String) -> Unit,
                     }
                 }
 
-                Section("Карта", p) {
-                    var url by remember { mutableStateOf(state.mapUrl) }
-                    Text(
-                        "Будь-який сайт з картою. За замовчуванням — офіційна карта «Повітряна тривога».",
-                        color = p.muted, fontSize = 13.sp
-                    )
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        OutlinedTextField(
-                            value = url, onValueChange = { url = it },
-                            label = { Text("Адреса сайту карти") },
-                            singleLine = true, modifier = Modifier.weight(1f)
-                        )
-                        Spacer(Modifier.width(10.dp))
-                        Button(onClick = { vm.setMapUrl(url) }) { Text("Зберегти") }
-                        Spacer(Modifier.width(10.dp))
-                        OutlinedButton(onClick = { url = ua.dash.data.Prefs.DEFAULT_MAP; vm.setMapUrl(url) }) { Text("Типова") }
-                    }
-                }
-
                 Section("Адреса для графіка ДТЕК", p) {
                     var street by remember { mutableStateOf(vm.prefs.street) }
                     var house by remember { mutableStateOf(vm.prefs.house) }

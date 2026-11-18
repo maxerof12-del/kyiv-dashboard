@@ -131,22 +131,23 @@ fun Dashboard(state: UiState, battery: Pair<Int, Boolean>, onSettings: () -> Uni
                     horizontalArrangement = Arrangement.spacedBy(d(10))
                 ) {
                     ClockCard(state, now, battery, onSettings, Modifier.weight(1.1f).fillMaxHeight())
-                    Column(
-                        Modifier.weight(1f).fillMaxHeight(),
-                        verticalArrangement = Arrangement.spacedBy(d(10))
-                    ) {
-                        if (state.feedEnabled) FeedBox(state, now)
-                        PowerPanel(
-                            state.power, now, compact = state.feedEnabled,
-                            modifier = Modifier.weight(1f).fillMaxWidth().clickable { onRefresh() }
-                        )
-                    }
+                    PowerPanel(
+                        state.power, now,
+                        modifier = Modifier.weight(1f).fillMaxHeight().clickable { onRefresh() }
+                    )
                     Column(
                         Modifier.weight(1.1f).fillMaxHeight(),
                         verticalArrangement = Arrangement.spacedBy(d(10))
                     ) {
-                        AlertCard(state, now)
-                        MapCard(state.mapUrl, state.homeLat, state.homeLon, Modifier.weight(1f).fillMaxWidth())
+                        val a = state.alert.data
+                        RegionAlertCard(
+                            "м. Київ", a?.active, a?.since ?: 0L, state.alert.error, now
+                        )
+                        RegionAlertCard(
+                            "Київська область", a?.oblastActive, a?.oblastSince ?: 0L, state.alert.error, now
+                        )
+                        if (state.feedEnabled) FeedBig(state, now, Modifier.weight(1f).fillMaxWidth())
+                        else Spacer(Modifier.weight(1f))
                     }
                 }
                 BottomStrip(state)
@@ -509,6 +510,124 @@ private fun DayRanges(title: String, slots: List<Slot>?, now: ZonedDateTime, isT
                     .padding(horizontal = d(5)) else Modifier
             )
         }
+    }
+}
+
+// ───────────────────────── Тревога: город и область ─────────────────────────
+
+@Composable
+private fun RegionAlertCard(title: String, active: Boolean?, since: Long, error: String?, now: ZonedDateTime) {
+    val p = LocalPalette.current
+    val on = active == true
+    val nowMs = now.toInstant().toEpochMilli()
+    Card(Modifier.fillMaxWidth(), color = if (on) p.alertBg else p.card) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            val dot = when {
+                active == null -> p.muted
+                on -> Color.White
+                else -> p.good
+            }
+            Box(
+                Modifier.size(d(30)).clip(RoundedCornerShape(50)).background(dot.copy(alpha = 0.22f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Box(Modifier.size(d(20)).clip(RoundedCornerShape(50)).background(dot))
+            }
+            Spacer(Modifier.width(d(14)))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    when {
+                        active == null -> error?.let { "Тривоги: $it" } ?: "Тривоги…"
+                        on -> "ТРИВОГА"
+                        else -> "Тривоги немає"
+                    },
+                    color = if (on) Color.White else p.text,
+                    fontSize = t(if (on) 38 else 31), fontWeight = FontWeight.Bold,
+                    lineHeight = t(40), maxLines = 1, overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    title + if (active != null && since > 0)
+                        (if (on) " · триває " else " · вже ") + durationText(nowMs - since) else "",
+                    color = if (on) Color.White else p.muted, fontSize = t(16), maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+    }
+}
+
+// ───────────────────────── Кормление: большая карточка ─────────────────────────
+
+@Composable
+private fun FeedBig(state: UiState, now: ZonedDateTime, modifier: Modifier) {
+    val p = LocalPalette.current
+    val f = state.botFeed.data
+    val nowMs = now.toInstant().toEpochMilli()
+    Card(modifier) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("🍼", fontSize = t(26))
+            Spacer(Modifier.width(d(8)))
+            Text("Останнє годування", color = p.muted, fontSize = t(18))
+        }
+        if (f?.lastAt == null) {
+            Spacer(Modifier.weight(1f))
+            Text(
+                when {
+                    state.botSearching -> "шукаю бота…"
+                    f != null -> "записів ще немає"
+                    else -> state.botFeed.error ?: "підключаюсь до бота…"
+                },
+                color = p.muted, fontSize = t(20)
+            )
+            Spacer(Modifier.weight(1f))
+            return@Card
+        }
+        val ago = nowMs - f.lastAt
+        val c = when {
+            ago < 150 * 60_000 -> p.good
+            ago < 210 * 60_000 -> p.warn
+            else -> p.bad
+        }
+        Spacer(Modifier.weight(1f))
+        Row(verticalAlignment = Alignment.Bottom) {
+            Text(
+                hm(zdt(f.lastAt)), color = p.text, fontSize = t(84), fontWeight = FontWeight.Bold,
+                lineHeight = t(86), letterSpacing = t(-2)
+            )
+            Spacer(Modifier.width(d(12)))
+            f.lastMl?.let {
+                Text(
+                    (if (it % 1.0 == 0.0) it.toInt().toString() else it.toString()) + " мл",
+                    color = p.text, fontSize = t(30), modifier = Modifier.padding(bottom = d(12))
+                )
+            }
+        }
+        Text(
+            durationText(ago) + " тому", color = c, fontSize = t(36), fontWeight = FontWeight.Bold,
+            lineHeight = t(38)
+        )
+        Spacer(Modifier.weight(1f))
+        // Прогресс к суточной цели
+        if (f.goalMl > 0) {
+            val frac = (f.todayMl / f.goalMl).toFloat().coerceIn(0f, 1f)
+            Canvas(Modifier.fillMaxWidth().height(d(10))) {
+                val r = CornerRadius(size.height / 2)
+                drawRoundRect(p.track, cornerRadius = r)
+                drawRoundRect(p.good, size = Size(size.width * frac, size.height), cornerRadius = r)
+            }
+            Spacer(Modifier.height(d(6)))
+        }
+        val oldMin = (nowMs - f.fetchedAt) / 60_000
+        Row(verticalAlignment = Alignment.Bottom) {
+            Text(
+                "сьогодні ${f.todayMl.roundToInt()}" + (if (f.goalMl > 0) " / ${f.goalMl}" else "") + " мл · ${f.todayCount} р.",
+                color = p.text, fontSize = t(19), maxLines = 1, modifier = Modifier.weight(1f)
+            )
+            f.lastPoop?.let { Text("💩 " + hm(zdt(it)), color = p.muted, fontSize = t(19)) }
+        }
+        val warn = (state.botFeed.error?.let { "⚠ $it" } ?: "") +
+            (if (oldMin >= 20) "⚠ бот мовчить ${durationText(nowMs - f.fetchedAt)}" else "")
+        if (warn.isNotEmpty()) Text(warn, color = p.warn, fontSize = t(13), maxLines = 1)
     }
 }
 
