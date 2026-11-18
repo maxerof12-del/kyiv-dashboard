@@ -148,6 +148,8 @@ fun Dashboard(state: UiState, battery: Pair<Int, Boolean>, onSettings: () -> Uni
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.weight(1f).padding(start = d(6))
                         )
+                        BatteryView(battery.first, battery.second)
+                        Spacer(Modifier.width(d(10)))
                         Text(
                             "⚙",
                             color = p.muted, fontSize = t(18),
@@ -179,14 +181,11 @@ private fun WeatherCard(state: UiState, battery: Pair<Int, Boolean>) {
                 Spacer(Modifier.width(d(12)))
                 Column(Modifier.weight(1f)) {
                     Text(w.description, color = p.headerText, fontSize = t(17), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text("відчув. ${sign(w.feels)}° · ${w.wind} м/с", color = p.headerMuted, fontSize = t(14))
-                    Text("${sign(w.min)}° … ${sign(w.max)}° · ☀ ${w.sunrise}–${w.sunset}", color = p.headerMuted, fontSize = t(14))
+                    Text("відчув. ${sign(w.feels)}° · ${w.wind} м/с", color = p.headerMuted, fontSize = t(14), maxLines = 1)
+                    Text("${sign(w.min)}° … ${sign(w.max)}° · ☀ ${w.sunrise}–${w.sunset}", color = p.headerMuted, fontSize = t(14), maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             } else {
                 Text(state.weather.error ?: "погода…", color = p.headerMuted, fontSize = t(16), modifier = Modifier.weight(1f))
-            }
-            Column(horizontalAlignment = Alignment.End, modifier = Modifier.align(Alignment.Top)) {
-                BatteryView(battery.first, battery.second)
             }
         }
         if (w != null && w.hours.isNotEmpty()) {
@@ -254,20 +253,20 @@ private fun BatteryView(level: Int, charging: Boolean) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(
             (if (charging) "⚡" else "") + "$level%",
-            color = if (level <= 15 && !charging) p.bad else p.headerText, fontSize = t(18)
+            color = if (level <= 15 && !charging) p.bad else p.muted, fontSize = t(14)
         )
         Spacer(Modifier.width(d(6)))
-        val fill = if (level <= 15 && !charging) p.bad else p.headerText
-        Canvas(Modifier.size(d(30), d(15))) {
+        val fill = if (level <= 15 && !charging) p.bad else p.muted
+        Canvas(Modifier.size(d(24), d(12))) {
             val sw = 1.5.dp.toPx()
             val bodyW = size.width - 3.dp.toPx()
             drawRoundRect(
-                color = p.headerMuted, size = Size(bodyW, size.height),
+                color = p.muted, size = Size(bodyW, size.height),
                 cornerRadius = CornerRadius(3.dp.toPx()),
                 style = androidx.compose.ui.graphics.drawscope.Stroke(sw)
             )
             drawRect(
-                p.headerMuted,
+                p.muted,
                 topLeft = Offset(bodyW + 0.5.dp.toPx(), size.height * 0.3f),
                 size = Size(2.dp.toPx(), size.height * 0.4f)
             )
