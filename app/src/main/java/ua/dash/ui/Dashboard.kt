@@ -397,10 +397,12 @@ private fun PowerCard(res: Res<PowerInfo>, now: ZonedDateTime, modifier: Modifie
     Card(modifier.fillMaxWidth()) {
         val info = res.data
         val a = info?.let { analyze(it, now) }
+        BoxWithConstraints(Modifier.fillMaxSize()) {
+        val dialSize = minOf(maxHeight, maxWidth * 0.52f)
         Row(Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
             // Круглые часы: внешнее кольцо — свет сегодня, внутреннее — завтра
             Box(
-                Modifier.fillMaxHeight().aspectRatio(1f, matchHeightConstraintsFirst = true),
+                Modifier.size(dialSize),
                 contentAlignment = Alignment.Center
             ) {
                 PowerDial(info, now)
@@ -413,8 +415,8 @@ private fun PowerCard(res: Res<PowerInfo>, now: ZonedDateTime, modifier: Modifie
                     )
                     Row(verticalAlignment = Alignment.Bottom) {
                         Text(
-                            hm(now), color = p.text, fontSize = t(64), fontWeight = FontWeight.Bold,
-                            lineHeight = t(66)
+                            hm(now), color = p.text, fontSize = t(48), fontWeight = FontWeight.Bold,
+                            lineHeight = t(50)
                         )
                     }
                     Text(
@@ -518,6 +520,7 @@ private fun PowerCard(res: Res<PowerInfo>, now: ZonedDateTime, modifier: Modifie
                     overflow = TextOverflow.Ellipsis
                 )
             }
+        }
         }
     }
 }
