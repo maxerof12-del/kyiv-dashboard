@@ -571,20 +571,7 @@ private fun FeedBig(state: UiState, now: ZonedDateTime, modifier: Modifier) {
     val p = LocalPalette.current
     val f = state.botFeed.data
     val nowMs = now.toInstant().toEpochMilli()
-    // Подсветка всей карточки: с 2 ч — оранжевая, с 3 ч — красная («пора кормить»)
-    val sinceMs = f?.lastAt?.let { nowMs - it }
-    val alarm = when {
-        sinceMs == null -> null
-        sinceMs >= 180 * 60_000 -> p.bad
-        sinceMs >= 120 * 60_000 -> Color(0xFFFF9F1C)
-        else -> null
-    }
-    Card(
-        modifier.then(
-            if (alarm != null) Modifier.border(2.dp, alarm, RoundedCornerShape(d(18))) else Modifier
-        ),
-        color = alarm?.let { androidx.compose.ui.graphics.lerp(p.card, it, 0.16f) }
-    ) {
+    Card(modifier) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("🍼", fontSize = t(26))
             Spacer(Modifier.width(d(8)))
