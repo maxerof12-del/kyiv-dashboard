@@ -19,6 +19,7 @@ import ua.dash.data.AlertState
 import ua.dash.data.ExtrasRepo
 import ua.dash.data.Rates
 import ua.dash.data.AlertsRepo
+import ua.dash.data.Btc
 import ua.dash.data.ClaudeAuth
 import ua.dash.data.CodexAuth
 import ua.dash.data.DtekRepo
@@ -40,6 +41,7 @@ data class UiState(
     val codex: Res<LimitsInfo> = Res(),
     val rates: Res<Rates> = Res(),
     val air: Res<Air> = Res(),
+    val btc: Res<Btc> = Res(),
     val mapUrl: String = "",
     val claudeLoggedIn: Boolean = false,
     val codexLoggedIn: Boolean = false,
@@ -69,12 +71,12 @@ class DashViewModel(app: Application) : AndroidViewModel(app) {
 
     init {
         loop(15 * 60_000L) { refreshWeather() }
-        loop(30_000L) { refreshAlert() }
+        loop(10_000L) { refreshAlert() }
         dtekJob = loop(10 * 60_000L) { refreshPower() }
         claudeJob = loop(2 * 60_000L) { refreshClaude() }
         codexJob = loop(2 * 60_000L) { refreshCodex() }
         loop(60 * 60_000L) { refreshRates() }
-        loop(30 * 60_000L) { refreshAir() }
+        loop(2 * 60_000L) { refreshBtc() }
     }
 
     private fun loop(period: Long, block: suspend () -> Unit): Job = viewModelScope.launch {
@@ -118,6 +120,8 @@ class DashViewModel(app: Application) : AndroidViewModel(app) {
 
     suspend fun refreshRates() = load({ it.rates }, { s, r -> s.copy(rates = r) }) { ExtrasRepo.rates() }
 
+    suspend fun refreshBtc() = load({ it.btc }, { s, r -> s.copy(btc = r) }) { ExtrasRepo.btc() }
+
     suspend fun refreshAir() = load({ it.air }, { s, r -> s.copy(air = r) }) { ExtrasRepo.air(prefs.lat, prefs.lon) }
 
     fun setMapUrl(u: String) {
@@ -155,7 +159,7 @@ class DashViewModel(app: Application) : AndroidViewModel(app) {
         launch { refreshClaude() }
         launch { refreshCodex() }
         launch { refreshRates() }
-        launch { refreshAir() }
+        launch { refreshBtc() }
     }
 
     // ───── Настройки ─────

@@ -6,6 +6,8 @@ import kotlin.math.roundToInt
 
 data class Rates(val usd: Double, val eur: Double, val date: String)
 
+data class Btc(val usd: Double, val change24h: Double)
+
 data class Air(val aqi: Int, val pm25: Int, val label: String)
 
 object ExtrasRepo {
@@ -24,6 +26,19 @@ object ExtrasRepo {
         }
         if (usd == 0.0) throw IllegalStateException("НБУ: немає курсу")
         return Rates(usd, eur, date)
+    }
+
+    /** Биткоин: CoinGecko, запасной — Binance */
+    fun btc(): Btc {
+        return try {
+            val j = JSONObject(
+                Http.get("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd&include_24hr_change=true")
+            ).getJSONObject("bitcoin")
+            Btc(j.getDouble("usd"), j.optDouble("usd_24h_change", 0.0))
+        } catch (e: Exception) {
+            val j = JSONObject(Http.get("https://api.binance.com/api/v3/ticker/24hr?symbol=BTCUSDT"))
+            Btc(j.getString("lastPrice").toDouble(), j.getString("priceChangePercent").toDouble())
+        }
     }
 
     /** Качество воздуха (европейский индекс AQI) */

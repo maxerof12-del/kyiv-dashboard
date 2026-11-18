@@ -93,21 +93,6 @@ fun SettingsScreen(vm: DashViewModel, state: UiState, openUrl: (String) -> Unit,
                     }
                 }
 
-                Section("Codex (ChatGPT)", p) {
-                    Text(
-                        if (state.codexLoggedIn) "Вхід виконано ✓" else "Не підключено",
-                        color = if (state.codexLoggedIn) p.good else p.muted, fontSize = 15.sp
-                    )
-                    Text(
-                        "Вхід через акаунт ChatGPT — той самий, що й у Codex на комп'ютері.",
-                        color = p.muted, fontSize = 13.sp
-                    )
-                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Button(onClick = { vm.loginCodex(openUrl) }) { Text("Увійти в ChatGPT") }
-                        if (state.codexLoggedIn) OutlinedButton(onClick = { vm.logoutCodex() }) { Text("Вийти") }
-                    }
-                }
-
                 Section("Адреса для графіка ДТЕК", p) {
                     var street by remember { mutableStateOf(vm.prefs.street) }
                     var house by remember { mutableStateOf(vm.prefs.house) }
