@@ -589,22 +589,19 @@ private fun FeedBig(state: UiState, now: ZonedDateTime, modifier: Modifier) {
             else -> p.bad
         }
         Spacer(Modifier.weight(1f))
-        Row(verticalAlignment = Alignment.Bottom) {
+        Text(
+            hm(zdt(f.lastAt)), color = p.text, fontSize = t(84), fontWeight = FontWeight.Bold,
+            lineHeight = t(86), letterSpacing = t(-2), maxLines = 1
+        )
+        f.lastMl?.let {
             Text(
-                hm(zdt(f.lastAt)), color = p.text, fontSize = t(84), fontWeight = FontWeight.Bold,
-                lineHeight = t(86), letterSpacing = t(-2)
+                (if (it % 1.0 == 0.0) it.toInt().toString() else it.toString()) + " мл",
+                color = p.text, fontSize = t(28), fontWeight = FontWeight.Medium, maxLines = 1
             )
-            Spacer(Modifier.width(d(12)))
-            f.lastMl?.let {
-                Text(
-                    (if (it % 1.0 == 0.0) it.toInt().toString() else it.toString()) + " мл",
-                    color = p.text, fontSize = t(30), modifier = Modifier.padding(bottom = d(12))
-                )
-            }
         }
         Text(
-            durationText(ago) + " тому", color = c, fontSize = t(36), fontWeight = FontWeight.Bold,
-            lineHeight = t(38)
+            durationText(ago) + " тому", color = c, fontSize = t(32), fontWeight = FontWeight.Bold,
+            lineHeight = t(34), maxLines = 1
         )
         Spacer(Modifier.weight(1f))
         // Прогресс к суточной цели
@@ -620,10 +617,10 @@ private fun FeedBig(state: UiState, now: ZonedDateTime, modifier: Modifier) {
         val oldMin = (nowMs - f.fetchedAt) / 60_000
         Row(verticalAlignment = Alignment.Bottom) {
             Text(
-                "сьогодні ${f.todayMl.roundToInt()}" + (if (f.goalMl > 0) " / ${f.goalMl}" else "") + " мл · ${f.todayCount} р.",
-                color = p.text, fontSize = t(19), maxLines = 1, modifier = Modifier.weight(1f)
+                "сьогодні ${f.todayMl.roundToInt()}" + (if (f.goalMl > 0) "/${f.goalMl}" else "") + " мл · ${f.todayCount} р.",
+                color = p.text, fontSize = t(17), maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f)
             )
-            f.lastPoop?.let { Text("💩 " + hm(zdt(it)), color = p.muted, fontSize = t(19)) }
+            f.lastPoop?.let { Text(" 💩 " + hm(zdt(it)), color = p.muted, fontSize = t(17), maxLines = 1) }
         }
         val warn = (state.botFeed.error?.let { "⚠ $it" } ?: "") +
             (if (oldMin >= 20) "⚠ бот мовчить ${durationText(nowMs - f.fetchedAt)}" else "")
