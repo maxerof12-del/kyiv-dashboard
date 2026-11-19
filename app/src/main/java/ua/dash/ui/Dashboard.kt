@@ -141,10 +141,10 @@ fun Dashboard(state: UiState, battery: Pair<Int, Boolean>, onSettings: () -> Uni
                     ) {
                         val a = state.alert.data
                         RegionAlertCard(
-                            "м. Київ", a?.active, a?.since ?: 0L, state.alert.error, now
+                            "м. Київ", a?.active, a?.since ?: 0L, state.alert.error, now, a?.level
                         )
                         RegionAlertCard(
-                            "Київська область", a?.oblastActive, a?.oblastSince ?: 0L, state.alert.error, now
+                            "Київська область", a?.oblastActive, a?.oblastSince ?: 0L, state.alert.error, now, a?.oblastLevel
                         )
                         if (state.feedEnabled) FeedBig(state, now, Modifier.weight(1f).fillMaxWidth())
                         else Spacer(Modifier.weight(1f))
@@ -524,15 +524,29 @@ private fun DayRanges(title: String, slots: List<Slot>?, now: ZonedDateTime, isT
 // ───────────────────────── Тревога: город и область ─────────────────────────
 
 @Composable
-private fun RegionAlertCard(title: String, active: Boolean?, since: Long, error: String?, now: ZonedDateTime) {
+private fun RegionAlertCard(
+    title: String, active: Boolean?, since: Long, error: String?, now: ZonedDateTime, level: String? = null,
+) {
     val p = LocalPalette.current
     val on = active == true
+    val yellow = on && level == "yellow"
     val nowMs = now.toInstant().toEpochMilli()
-    Card(Modifier.fillMaxWidth(), color = if (on) p.alertBg else p.card) {
+    // Жовта (дронова) — янтарный фон с тёмным текстом; червона или неизвестная — красный фон
+    val bg = when {
+        yellow -> Color(0xFFF2B705)
+        on -> p.alertBg
+        else -> p.card
+    }
+    val fg = when {
+        yellow -> Color(0xFF1B1B1B)
+        on -> Color.White
+        else -> p.text
+    }
+    Card(Modifier.fillMaxWidth(), color = bg) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             val dot = when {
                 active == null -> p.muted
-                on -> Color.White
+                on -> fg
                 else -> p.good
             }
             Box(
@@ -549,14 +563,20 @@ private fun RegionAlertCard(title: String, active: Boolean?, since: Long, error:
                         on -> "ТРИВОГА"
                         else -> "Тривоги немає"
                     },
-                    color = if (on) Color.White else p.text,
+                    color = fg,
                     fontSize = t(if (on) 38 else 31), fontWeight = FontWeight.Bold,
                     lineHeight = t(40), maxLines = 1, overflow = TextOverflow.Ellipsis
                 )
+                val kind = when {
+                    !on -> ""
+                    level == "yellow" -> " · дрони"
+                    level == "red" -> " · ракети"
+                    else -> ""
+                }
                 Text(
-                    title + if (active != null && since > 0)
-                        (if (on) " · триває " else " · вже ") + durationText(nowMs - since) else "",
-                    color = if (on) Color.White else p.muted, fontSize = t(16), maxLines = 1,
+                    title + kind + if (active != null && since > 0)
+                        (if (on) " · " else " · вже ") + durationText(nowMs - since) else "",
+                    color = if (on) fg else p.muted, fontSize = t(16), maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
             }
